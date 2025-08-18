@@ -49,6 +49,20 @@ See [Configuring quasar.config.js](https://v2.quasar.dev/quasar-cli-vite/quasar-
 
 ### Docker
 
+#### Docker Compose
+
+Replace your-email@example.com and yourdomain.com with your real email and domain.
+
+Your PocketBase API will be accessible at https://yourdomain.com/api/...
+
+Your Quasar frontend SPA will be accessible at https://yourdomain.com/
+
+Put your PocketBase binary in pocketbase/pocketbase before building
+
+Make sure pb_data/hooks/crons.js (with your cron logic) is inside the pocketbase/pb_data/hooks folder
+
+Traefik automatically provisions Let's Encrypt TLS certificates
+
 Build the Docker image:
 
 ```bash

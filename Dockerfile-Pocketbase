@@ -1,20 +1,17 @@
-FROM alpine:latest
+FROM alpine:3.18
 
-# Install wget (for healthchecks) and unzip (to extract pb binary)
-RUN apk add --no-cache wget unzip
+RUN apk add --no-cache bash curl
 
-WORKDIR /pb
+WORKDIR /app
 
-# Download PocketBase binary
-ADD https://github.com/pocketbase/pocketbase/releases/download/v0.21.0/pocketbase_0.21.0_linux_amd64.zip pb.zip
-RUN unzip pb.zip && rm pb.zip
+# Copy PocketBase binary (put your compiled binary here)
+COPY pocketbase .
 
-# Copy entrypoint script
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x pocketbase
 
-EXPOSE ${BACKEND_PORT}
+# Copy pb_data folder with hooks, cron jobs, database, etc.
+COPY pb_data ./pb_data
 
-VOLUME ["/pb_data"]
+EXPOSE 8090
 
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["./pocketbase", "serve", "--dir", "/app/pb_data"]
