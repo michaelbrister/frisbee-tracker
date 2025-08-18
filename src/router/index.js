@@ -4,7 +4,7 @@ import LeaguePage from '../pages/LeaguePage.vue'
 import AdminPage from '../pages/AdminPage.vue'
 
 const routes = [
-  { path: '/', name: 'login', component: LoginPage },
+  { path: '/login', name: 'login', component: LoginPage },
   { path: '/league', name: 'league', component: LeaguePage, meta: { requiresAuth: true } },
   { path: '/admin', name: 'admin', component: AdminPage, meta: { requiresAuth: true } },
 ]
