@@ -39,7 +39,7 @@
               <div class="row q-col-gutter-md q-mt-sm">
                 <div class="col" v-for="status in ['In', 'Maybe', 'Out', 'Unknown']" :key="status">
                   <div class="text-subtitle2">{{ status }}</div>
-                  <q-list bordered>
+                  <q-list class="q-mt-sm">
                     <q-item v-for="user in rsvpList(game, status, 'adult')" :key="user.id">
                       <q-item-section>{{ user.name }}</q-item-section>
                     </q-item>
@@ -54,7 +54,7 @@
               <div class="row q-col-gutter-md q-mt-sm">
                 <div class="col" v-for="status in ['In', 'Maybe', 'Out', 'Unknown']" :key="status">
                   <div class="text-subtitle2">{{ status }}</div>
-                  <q-list bordered>
+                  <q-list class="q-mt-sm">
                     <q-item v-for="user in rsvpList(game, status, 'kid')" :key="user.id">
                       <q-item-section>{{ user.name }}</q-item-section>
                     </q-item>
@@ -68,17 +68,23 @@
             <!-- RSVP buttons for logged-in user and children -->
             <div v-if="pb.authStore.isValid && currentUser" class="q-mt-md">
               <!-- Current user -->
-              <div class="row q-gutter-sm q-mb-sm">
-                <span class="text-subtitle2">Your RSVP:</span>
+              <div class="row q-gutter-sm q-mb-sm q-wrap">
+                <span class="text-subtitle2 q-mr-sm q-mb-xs">Your RSVP:</span>
                 <q-btn
                   v-for="status in ['In', 'Maybe', 'Out']"
                   :key="status"
-                  dense
-                  flat
-                  color="primary"
                   :label="status"
+                  flat
+                  :ripple="true"
+                  :color="getCurrentRSVP(game, currentUser.id) === status ? 'primary' : 'grey-6'"
+                  :class="[
+                    'q-mb-xs',
+                    'q-hoverable cursor-pointer transition-all',
+                    getCurrentRSVP(game, currentUser.id) === status
+                      ? 'bg-grey-2 text-weight-bold'
+                      : 'text-grey-8',
+                  ]"
                   @click="setRSVP(game.id, status, currentUser.id)"
-                  :disable="getCurrentRSVP(game, currentUser.id) === status"
                 />
               </div>
 
@@ -86,18 +92,24 @@
               <div
                 v-for="child in getChildren(currentUser.id)"
                 :key="child.id"
-                class="row q-gutter-sm q-mt-sm"
+                class="row q-gutter-sm q-mt-sm q-wrap"
               >
-                <span class="text-subtitle2">{{ child.name }}'s RSVP:</span>
+                <span class="text-subtitle2 q-mr-sm q-mb-xs">{{ child.name }}'s RSVP:</span>
                 <q-btn
                   v-for="status in ['In', 'Maybe', 'Out']"
                   :key="status"
-                  dense
-                  flat
-                  color="secondary"
                   :label="status"
+                  flat
+                  :ripple="true"
+                  :color="getCurrentRSVP(game, child.id) === status ? 'secondary' : 'grey-6'"
+                  :class="[
+                    'q-mb-xs',
+                    'q-hoverable cursor-pointer transition-all',
+                    getCurrentRSVP(game, child.id) === status
+                      ? 'bg-grey-2 text-weight-bold'
+                      : 'text-grey-8',
+                  ]"
                   @click="setRSVP(game.id, status, child.id)"
-                  :disable="getCurrentRSVP(game, child.id) === status"
                 />
               </div>
             </div>
@@ -274,3 +286,13 @@ onMounted(async () => {
   setInterval(loadGames, 30000)
 })
 </script>
+<style>
+/* Optional: make buttons easier to tap on mobile */
+@media (max-width: 600px) {
+  .q-btn.dense {
+    min-width: 64px;
+    height: 36px;
+    font-size: 14px;
+  }
+}
+</style>
