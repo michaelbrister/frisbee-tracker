@@ -46,8 +46,10 @@ yarn-error.log*
 .env.local*
 
 # PocketBase database files
-pb_data/data.db
-pb_data/*.auxiliary.db
-pb_data/auxiliary.db*
+pocketbase/pb_data/data.db
+pocketbase/pb_data/data.db*
+pocketbase/pb_data/*.auxiliary.db
+pocketbase/pb_data/auxiliary.db*
 
-*.zip
+pocketbase/pb_data/backups/*.zip
+pocketbase/pb_data/backups/*.zip*
