@@ -20,7 +20,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ./src
       dockerfile: Dockerfile
     labels:
       - 'traefik.enable=true'
