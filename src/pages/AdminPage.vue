@@ -19,6 +19,12 @@
     <q-page-container>
       <q-page padding>
         <h1 class="text-h5">Admin Panel - Manage Games</h1>
+        <q-toggle
+          v-model="frisbeeCronEnabled"
+          label="Enable Frisbee Game Cron"
+          color="primary"
+          @update:model-value="toggleCronFlag"
+        />
 
         <!-- Create New Game Form -->
         <q-card flat bordered class="q-pa-md q-mb-md">
@@ -141,6 +147,7 @@ import { DateTime } from 'luxon'
 
 const router = useRouter()
 const games = ref([])
+const frisbeeCronEnabled = ref(false)
 
 const newGame = ref({
   title: 'Frisbee',
@@ -158,6 +165,66 @@ const columns = [
   { name: 'location', label: 'Location', field: 'location', sortable: true },
   { name: 'actions', label: 'Actions', field: 'actions', sortable: false },
 ]
+
+async function loadCronFlag() {
+  try {
+    console.log('Loading cron flag...')
+    const settings = await pb.collection('settings').getFullList()
+
+    // Find the record with key 'frisbee_cron'
+    const setting = settings.find((s) => s.key === 'frisbee_cron')
+
+    if (setting) {
+      frisbeeCronEnabled.value = setting.value
+      console.log('Cron flag value:', setting.value)
+    } else {
+      console.log('frisbee_cron setting not found, defaulting to false')
+      frisbeeCronEnabled.value = false
+    }
+  } catch (err) {
+    console.error('Failed to load cron flag:', err)
+    frisbeeCronEnabled.value = false
+  }
+}
+
+async function toggleCronFlag() {
+  try {
+    // Get all settings
+    const settings = await pb.collection('settings').getFullList()
+
+    // Find the record with key 'frisbee_cron'
+    const setting = settings.find((s) => s.key === 'frisbee_cron')
+
+    if (setting) {
+      // Update the existing record
+      await pb.collection('settings').update(setting.id, {
+        value: frisbeeCronEnabled.value,
+      })
+      Notify.create({
+        type: 'positive',
+        message: `Frisbee cron ${frisbeeCronEnabled.value ? 'enabled' : 'disabled'}`,
+      })
+    } else {
+      // Create the record if it doesn't exist
+      await pb.collection('settings').create({
+        key: 'frisbee_cron',
+        value: frisbeeCronEnabled.value,
+      })
+      Notify.create({
+        type: 'positive',
+        message: `Frisbee cron setting created and ${frisbeeCronEnabled.value ? 'enabled' : 'disabled'}`,
+      })
+    }
+  } catch (err) {
+    console.error('Failed to update cron flag:', err)
+    Notify.create({
+      type: 'negative',
+      message: 'Failed to update cron flag',
+    })
+    // Revert toggle on failure
+    frisbeeCronEnabled.value = !frisbeeCronEnabled.value
+  }
+}
 
 function sortByDate(a, b) {
   return new Date(a.date).getTime() - new Date(b.date).getTime()
@@ -353,5 +420,6 @@ function goToLeague() {
 
 onMounted(() => {
   loadGames()
+  loadCronFlag()
 })
 </script>
