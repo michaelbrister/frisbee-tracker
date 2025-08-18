@@ -1,0 +1,50 @@
+version: '3.9'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quasar-frontend
+    ports:
+      - '${FRONTEND_PORT}:80'
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:${FRONTEND_PORT}']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile-Pocketbase
+    container_name: pocketbase-backend
+    ports:
+      - '${BACKEND_PORT}:${BACKEND_PORT}'
+    environment:
+      - POCKETBASE_ADMIN_EMAIL=${POCKETBASE_ADMIN_EMAIL}
+      - POCKETBASE_ADMIN_PASSWORD=${POCKETBASE_ADMIN_PASSWORD}
+      - POCKETBASE_DATA_DIR=${POCKETBASE_DATA_DIR}
+    volumes:
+      - pb_data:/pb_data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--spider',
+          '-q',
+          'http://localhost:${BACKEND_PORT}/api/collections/_/records',
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  pb_data:

@@ -46,3 +46,30 @@ quasar build
 ### Customize the configuration
 
 See [Configuring quasar.config.js](https://v2.quasar.dev/quasar-cli-vite/quasar-config-js).
+
+### Docker
+
+Build the Docker image:
+
+```bash
+docker build -t frisbee-tracker .
+docker build -t frisbee-tracker-pocketbase -f Dockerfile-Pocketbase .
+```
+
+Run the Docker image:
+
+```bash
+docker run -p 8080:80 frisbee-tracker
+```
+
+```bash
+docker run -p 8090:8090 -v pb_data:/pb_data frisbee-tracker-pocketbase
+```
+
+```bash
+docker-compose up -d
+```
+
+```bash
+docker-compose up --build
+```

@@ -1,0 +1,20 @@
+FROM alpine:latest
+
+# Install wget (for healthchecks) and unzip (to extract pb binary)
+RUN apk add --no-cache wget unzip
+
+WORKDIR /pb
+
+# Download PocketBase binary
+ADD https://github.com/pocketbase/pocketbase/releases/download/v0.21.0/pocketbase_0.21.0_linux_amd64.zip pb.zip
+RUN unzip pb.zip && rm pb.zip
+
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE ${BACKEND_PORT}
+
+VOLUME ["/pb_data"]
+
+ENTRYPOINT ["/entrypoint.sh"]
