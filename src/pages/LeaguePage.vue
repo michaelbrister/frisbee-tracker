@@ -18,110 +18,203 @@
 
     <q-page-container>
       <q-page padding>
-        <h1 class="text-h5 q-mb-md">Ultimate Frisbee League</h1>
+        <q-pull-to-refresh @refresh="refreshData" :disable="loading">
+          <h1 class="text-h5 q-mb-md">Ultimate Frisbee League</h1>
 
-        <div v-for="game in upcomingGames" :key="game.id" class="q-mb-xl">
-          <q-card flat bordered class="q-pa-md" v-if="allUsers.length && game?.rsvps">
-            <div class="row justify-between items-center q-mb-sm">
-              <div>
-                <div class="text-subtitle1">{{ game.title }}</div>
-                <div class="text-caption">
-                  {{ formatToEastern(game.date) }} - {{ game.location }}
+          <div v-if="loading">
+            <q-skeleton type="heading" />
+            <q-skeleton height="150px" class="q-mt-md" />
+            <q-skeleton height="150px" class="q-mt-md" />
+          </div>
+
+          <div v-else>
+            <div v-for="game in upcomingGames" :key="game.id" class="q-mb-xl">
+              <q-card flat bordered class="q-pa-md" v-if="allUsers.length && game?.rsvps">
+                <div class="row justify-between items-center q-mb-sm">
+                  <div>
+                    <div class="text-subtitle1">
+                      {{ game.title }}
+                      <span class="text-caption text-grey-7 q-ml-sm">
+                        ({{ totalRSVPCount(game) }} players)
+                      </span>
+                    </div>
+                    <div class="text-caption">
+                      {{ formatToEastern(game.date) }} - {{ game.location }}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+                <q-separator class="q-my-md" />
 
-            <q-separator />
+                <!-- RSVP buttons for logged-in user and children -->
+                <div v-if="pb.authStore.isValid && currentUser" class="q-mt-md">
+                  <!-- Current user RSVP -->
+                  <div class="q-mt-md">
+                    <div class="text-subtitle2 q-mb-xs">Your RSVP:</div>
+                    <div class="row q-col-gutter-sm q-mb-sm">
+                      <div v-for="status in RSVP_STATUSES" :key="status" class="col">
+                        <q-btn
+                          :label="status"
+                          unelevated
+                          class="full-width"
+                          :color="
+                            getCurrentRSVP(game, currentUser.id) === status ? 'primary' : 'grey-5'
+                          "
+                          :text-color="
+                            getCurrentRSVP(game, currentUser.id) === status ? 'white' : 'black'
+                          "
+                          @click="setRSVP(game.id, status, currentUser.id)"
+                        />
+                      </div>
+                    </div>
+                  </div>
 
-            <!-- Adults RSVP -->
-            <div class="q-mt-md">
-              <div class="text-h6">Adults</div>
-              <div class="row q-col-gutter-md q-mt-sm">
-                <div class="col" v-for="status in ['In', 'Maybe', 'Out', 'Unknown']" :key="status">
-                  <div class="text-subtitle2">{{ status }}</div>
-                  <q-list class="q-mt-sm">
-                    <q-item v-for="user in rsvpList(game, status, 'adult')" :key="user.id">
-                      <q-item-section>{{ user.name }}</q-item-section>
-                    </q-item>
-                  </q-list>
+                  <!-- Children RSVP -->
+                  <div v-for="child in getChildren(currentUser.id)" :key="child.id" class="q-mt-sm">
+                    <div class="text-subtitle2 q-mb-xs">{{ child.name }}'s RSVP:</div>
+                    <div class="row q-col-gutter-sm q-mb-sm">
+                      <div v-for="status in RSVP_STATUSES" :key="status" class="col">
+                        <q-btn
+                          :label="status"
+                          unelevated
+                          :color="
+                            getCurrentRSVP(game, child.id) === status ? 'secondary' : 'grey-5'
+                          "
+                          :text-color="
+                            getCurrentRSVP(game, child.id) === status ? 'white' : 'black'
+                          "
+                          class="full-width"
+                          @click="setRSVP(game.id, status, child.id)"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
+                <q-separator />
+
+                <!-- Adults RSVP Collapsible -->
+                <q-expansion-item
+                  icon="person"
+                  label="Adults"
+                  class="q-mb-md"
+                  :header-class="'text-h6'"
+                  dense
+                  expand-separator
+                >
+                  <template #header>
+                    <div class="row items-center justify-between no-wrap" style="width: 100%">
+                      <div>Adults</div>
+                      <div>
+                        <q-chip
+                          v-for="status in RSVP_STATUSES_WITH_UNKNOWN"
+                          :key="status"
+                          :color="statusColor(status)"
+                          text-color="white"
+                          dense
+                          class="q-ml-sm"
+                          :label="`${rsvpList(game, status, 'adult').length} ${status}`"
+                        />
+                      </div>
+                    </div>
+                  </template>
+
+                  <div class="rsvp-status-container q-mt-sm">
+                    <div
+                      v-for="status in RSVP_STATUSES_WITH_UNKNOWN"
+                      :key="status"
+                      class="rsvp-status-column"
+                    >
+                      <div class="text-subtitle2">{{ status }}</div>
+                      <q-list class="q-mt-sm">
+                        <q-item
+                          v-for="user in rsvpList(game, status, 'adult')"
+                          :key="user.id"
+                          class="q-pa-none"
+                        >
+                          <q-item-section class="q-pa-none">
+                            <div class="row items-center justify-between no-wrap">
+                              <div class="ellipsis">{{ user.name }}</div>
+                              <q-chip
+                                :color="statusColor(status)"
+                                text-color="white"
+                                dense
+                                label
+                                class="q-ml-sm"
+                              />
+                            </div>
+                          </q-item-section>
+                        </q-item>
+                      </q-list>
+                    </div>
+                  </div>
+                </q-expansion-item>
+
+                <!-- Kids RSVP Collapsible -->
+                <q-expansion-item
+                  icon="child_care"
+                  label="Kids"
+                  class="q-mb-md"
+                  :header-class="'text-h6'"
+                  dense
+                  expand-separator
+                >
+                  <template #header>
+                    <div class="row items-center justify-between no-wrap" style="width: 100%">
+                      <div>Kids</div>
+                      <div>
+                        <q-chip
+                          v-for="status in RSVP_STATUSES_WITH_UNKNOWN"
+                          :key="status"
+                          :color="statusColor(status)"
+                          text-color="white"
+                          dense
+                          class="q-ml-sm"
+                          :label="`${rsvpList(game, status, 'kid').length} ${status}`"
+                        />
+                      </div>
+                    </div>
+                  </template>
+
+                  <div class="rsvp-status-container q-mt-sm">
+                    <div
+                      v-for="status in RSVP_STATUSES_WITH_UNKNOWN"
+                      :key="status"
+                      class="rsvp-status-column"
+                    >
+                      <div class="text-subtitle2">{{ status }}</div>
+                      <q-list class="q-mt-sm">
+                        <q-item
+                          v-for="user in rsvpList(game, status, 'kid')"
+                          :key="user.id"
+                          class="q-pa-none"
+                        >
+                          <q-item-section class="q-pa-none">
+                            <div class="row items-center justify-between no-wrap">
+                              <div class="ellipsis">{{ user.name }}</div>
+                              <q-chip
+                                :color="statusColor(status)"
+                                text-color="white"
+                                dense
+                                label
+                                class="q-ml-sm"
+                              />
+                            </div>
+                          </q-item-section>
+                        </q-item>
+                      </q-list>
+                    </div>
+                  </div>
+                </q-expansion-item>
+              </q-card>
             </div>
-
-            <!-- Kids RSVP -->
-            <div class="q-mt-md">
-              <div class="text-h6">Kids</div>
-              <div class="row q-col-gutter-md q-mt-sm">
-                <div class="col" v-for="status in ['In', 'Maybe', 'Out', 'Unknown']" :key="status">
-                  <div class="text-subtitle2">{{ status }}</div>
-                  <q-list class="q-mt-sm">
-                    <q-item v-for="user in rsvpList(game, status, 'kid')" :key="user.id">
-                      <q-item-section>{{ user.name }}</q-item-section>
-                    </q-item>
-                  </q-list>
-                </div>
-              </div>
-            </div>
-
-            <q-separator class="q-my-md" />
-
-            <!-- RSVP buttons for logged-in user and children -->
-            <div v-if="pb.authStore.isValid && currentUser" class="q-mt-md">
-              <!-- Current user -->
-              <div class="row q-gutter-sm q-mb-sm q-wrap">
-                <span class="text-subtitle2 q-mr-sm q-mb-xs">Your RSVP:</span>
-                <q-btn
-                  v-for="status in ['In', 'Maybe', 'Out']"
-                  :key="status"
-                  :label="status"
-                  flat
-                  :ripple="true"
-                  :color="getCurrentRSVP(game, currentUser.id) === status ? 'primary' : 'grey-6'"
-                  :class="[
-                    'q-mb-xs',
-                    'q-hoverable cursor-pointer transition-all',
-                    getCurrentRSVP(game, currentUser.id) === status
-                      ? 'bg-grey-2 text-weight-bold'
-                      : 'text-grey-8',
-                  ]"
-                  @click="setRSVP(game.id, status, currentUser.id)"
-                />
-              </div>
-
-              <!-- Children -->
-              <div
-                v-for="child in getChildren(currentUser.id)"
-                :key="child.id"
-                class="row q-gutter-sm q-mt-sm q-wrap"
-              >
-                <span class="text-subtitle2 q-mr-sm q-mb-xs">{{ child.name }}'s RSVP:</span>
-                <q-btn
-                  v-for="status in ['In', 'Maybe', 'Out']"
-                  :key="status"
-                  :label="status"
-                  flat
-                  :ripple="true"
-                  :color="getCurrentRSVP(game, child.id) === status ? 'secondary' : 'grey-6'"
-                  :class="[
-                    'q-mb-xs',
-                    'q-hoverable cursor-pointer transition-all',
-                    getCurrentRSVP(game, child.id) === status
-                      ? 'bg-grey-2 text-weight-bold'
-                      : 'text-grey-8',
-                  ]"
-                  @click="setRSVP(game.id, status, child.id)"
-                />
-              </div>
-            </div>
-          </q-card>
-        </div>
+          </div>
+        </q-pull-to-refresh>
       </q-page>
     </q-page-container>
   </q-layout>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Notify } from 'quasar'
 import pb from '../services/pocketbase'
@@ -132,15 +225,10 @@ const upcomingGames = ref([])
 const currentUser = ref(null)
 const isAdmin = ref(false)
 const allUsers = ref([])
+const loading = ref(true)
 
-const normalizedUsers = computed(() => {
-  if (!allUsers.value?.length) return []
-
-  return allUsers.value.map((user) => ({
-    ...user,
-    parentId: typeof user.parent === 'string' ? user.parent : user.parent?.id || null,
-  }))
-})
+const RSVP_STATUSES = ['In', 'Maybe', 'Out']
+const RSVP_STATUSES_WITH_UNKNOWN = ['In', 'Maybe', 'Out', 'Unknown']
 
 async function loadUser() {
   currentUser.value = pb.authStore.model
@@ -149,7 +237,6 @@ async function loadUser() {
 
 async function loadAllUsers() {
   try {
-    console.log('Loading users...')
     allUsers.value = await pb.collection('_pb_users_auth_').getFullList({ sort: 'name' })
   } catch (err) {
     console.error('Error loading users:', err)
@@ -159,8 +246,7 @@ async function loadAllUsers() {
 
 async function loadGames() {
   try {
-    console.log('Loading games...')
-    // const games = await pb.collection('games').getFullList({ sort: 'date' })
+    loading.value = true
     const games = await pb.collection('games').getFullList({
       sort: 'date',
       filter: 'active=true',
@@ -175,19 +261,28 @@ async function loadGames() {
   } catch (err) {
     console.error('Error loading upcoming games', err)
     Notify.create({ type: 'negative', message: 'Failed to load games' })
+  } finally {
+    loading.value = false
   }
 }
 
-function rsvpList(game, status, type = 'adult') {
-  if (!normalizedUsers.value?.length || !game?.rsvps) return []
+async function refreshData(done) {
+  await loadUser()
+  await loadAllUsers()
+  await loadGames()
+  done()
+}
 
-  const list = normalizedUsers.value.map((user) => {
+function rsvpList(game, status, type = 'adult') {
+  if (!allUsers.value.length || !game?.rsvps) return []
+
+  const list = allUsers.value.map((user) => {
     const attendance = game.rsvps.find((a) => a?.user === user.id)
     return {
       id: user.id,
       name: user.name || user.email || 'Unknown',
       status: attendance?.status || 'Unknown',
-      parentId: user.parentId,
+      parentId: typeof user.parent === 'string' ? user.parent : user.parent?.id || null,
     }
   })
 
@@ -200,9 +295,24 @@ function rsvpList(game, status, type = 'adult') {
   }
 }
 
-function getChildren(userId) {
-  if (!userId || !normalizedUsers.value) return []
-  return normalizedUsers.value.filter((u) => u.parentId === userId)
+function statusColor(status) {
+  switch (status) {
+    case 'In':
+      return 'green'
+    case 'Maybe':
+      return 'orange'
+    case 'Out':
+      return 'red'
+    case 'Unknown':
+      return 'grey'
+    default:
+      return 'grey'
+  }
+}
+
+function totalRSVPCount(game) {
+  if (!game?.rsvps) return 0
+  return game.rsvps.length
 }
 
 function getCurrentRSVP(game, userId = null) {
@@ -218,7 +328,7 @@ async function setRSVP(gameId, status, userId) {
   const user = allUsers.value.find((u) => u.id === userId)
   if (!user) return
 
-  if (!['In', 'Maybe', 'Out'].includes(status)) {
+  if (!RSVP_STATUSES.includes(status)) {
     Notify.create({ type: 'negative', message: 'Invalid status' })
     return
   }
@@ -258,6 +368,14 @@ async function setRSVP(gameId, status, userId) {
   }
 }
 
+function getChildren(userId) {
+  if (!userId || !allUsers.value.length) return []
+  return allUsers.value.filter((u) => {
+    const parentId = typeof u.parent === 'string' ? u.parent : u.parent?.id || null
+    return parentId === userId
+  })
+}
+
 function logout() {
   pb.authStore.clear()
   router.push({ name: 'login' })
@@ -267,14 +385,10 @@ function goToAdmin() {
   router.push({ name: 'admin' })
 }
 
-// Format date/time string to Eastern time with readable format
 function formatToEastern(datetimeStr) {
   if (!datetimeStr) return ''
-  // Try fromISO first, fallback to fromSQL in case the format differs
   let dt = DateTime.fromISO(datetimeStr, { zone: 'utc' })
-  if (!dt.isValid) {
-    dt = DateTime.fromSQL(datetimeStr, { zone: 'utc' })
-  }
+  if (!dt.isValid) dt = DateTime.fromSQL(datetimeStr, { zone: 'utc' })
   if (!dt.isValid) return 'Invalid DateTime'
   return dt.setZone('America/New_York').toLocaleString(DateTime.DATETIME_MED)
 }
@@ -283,11 +397,30 @@ onMounted(async () => {
   await loadUser()
   await loadAllUsers()
   await loadGames()
-  setInterval(loadGames, 30000)
 })
 </script>
+
 <style>
-/* Optional: make buttons easier to tap on mobile */
+.rsvp-status-container {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.rsvp-status-column {
+  flex: 0 0 90px; /* fixed width per column to fit nicely on mobile */
+  min-width: 70px;
+  max-width: 130px;
+}
+
+.ellipsis {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Smaller buttons on mobile */
 @media (max-width: 600px) {
   .q-btn.dense {
     min-width: 64px;
