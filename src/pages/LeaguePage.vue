@@ -230,12 +230,12 @@ const loading = ref(true)
 const RSVP_STATUSES = ['In', 'Maybe', 'Out']
 const RSVP_STATUSES_WITH_UNKNOWN = ['In', 'Maybe', 'Out', 'Unknown']
 
-async function loadUser() {
+const loadUser = async () => {
   currentUser.value = pb.authStore.model
   isAdmin.value = currentUser.value?.isAdmin || false
 }
 
-async function loadAllUsers() {
+const loadAllUsers = async () => {
   try {
     allUsers.value = await pb.collection('_pb_users_auth_').getFullList({ sort: 'name' })
   } catch (err) {
@@ -244,7 +244,7 @@ async function loadAllUsers() {
   }
 }
 
-async function loadGames() {
+const loadGames = async () => {
   try {
     loading.value = true
     const games = await pb.collection('games').getFullList({
@@ -266,14 +266,14 @@ async function loadGames() {
   }
 }
 
-async function refreshData(done) {
+const refreshData = async (done) => {
   await loadUser()
   await loadAllUsers()
   await loadGames()
   done()
 }
 
-function rsvpList(game, status, type = 'adult') {
+const rsvpList = (game, status, type = 'adult') => {
   if (!allUsers.value.length || !game?.rsvps) return []
 
   const list = allUsers.value.map((user) => {
@@ -295,7 +295,7 @@ function rsvpList(game, status, type = 'adult') {
   }
 }
 
-function statusColor(status) {
+const statusColor = (status) => {
   switch (status) {
     case 'In':
       return 'green'
@@ -310,19 +310,19 @@ function statusColor(status) {
   }
 }
 
-function totalRSVPCount(game) {
+const totalRSVPCount = (game) => {
   if (!game?.rsvps) return 0
   return game.rsvps.length
 }
 
-function getCurrentRSVP(game, userId = null) {
+const getCurrentRSVP = (game, userId = null) => {
   const targetUser = userId || currentUser.value?.id
   if (!game?.rsvps || !targetUser) return 'Unknown'
   const found = game.rsvps.find((a) => a?.user === targetUser)
   return found?.status || 'Unknown'
 }
 
-async function setRSVP(gameId, status, userId) {
+const setRSVP = async (gameId, status, userId) => {
   if (!pb.authStore.isValid || !userId) return
 
   const user = allUsers.value.find((u) => u.id === userId)
@@ -368,7 +368,7 @@ async function setRSVP(gameId, status, userId) {
   }
 }
 
-function getChildren(userId) {
+const getChildren = (userId) => {
   if (!userId || !allUsers.value.length) return []
   return allUsers.value.filter((u) => {
     const parentId = typeof u.parent === 'string' ? u.parent : u.parent?.id || null
@@ -376,16 +376,16 @@ function getChildren(userId) {
   })
 }
 
-function logout() {
+const logout = () => {
   pb.authStore.clear()
   router.push({ name: 'login' })
 }
 
-function goToAdmin() {
+const goToAdmin = () => {
   router.push({ name: 'admin' })
 }
 
-function formatToEastern(datetimeStr) {
+const formatToEastern = (datetimeStr) => {
   if (!datetimeStr) return ''
   let dt = DateTime.fromISO(datetimeStr, { zone: 'utc' })
   if (!dt.isValid) dt = DateTime.fromSQL(datetimeStr, { zone: 'utc' })
@@ -394,8 +394,9 @@ function formatToEastern(datetimeStr) {
 }
 
 onMounted(async () => {
-  await loadUser()
-  await loadAllUsers()
+  // Run these two in parallel to improve loading speed
+  await Promise.all([loadUser(), loadAllUsers()])
+  // Then load games (depends on users loaded)
   await loadGames()
 })
 </script>
@@ -409,15 +410,18 @@ onMounted(async () => {
 }
 
 .rsvp-status-column {
-  flex: 0 0 90px; /* fixed width per column to fit nicely on mobile */
+  flex: 0 0 90px; /* default for mobile */
   min-width: 70px;
   max-width: 130px;
 }
 
-.ellipsis {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+@media (min-width: 768px) {
+  /* Desktop and larger tablets */
+  .rsvp-status-column {
+    flex: 0 0 160px; /* wider columns on desktop */
+    min-width: 140px;
+    max-width: 200px;
+  }
 }
 
 /* Smaller buttons on mobile */
@@ -427,5 +431,11 @@ onMounted(async () => {
     height: 36px;
     font-size: 14px;
   }
+}
+
+.ellipsis {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 </style>
