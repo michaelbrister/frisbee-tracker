@@ -100,10 +100,11 @@
                   dense
                   expand-separator
                 >
+                  <!-- Adults header -->
                   <template #header>
-                    <div class="row items-center justify-between no-wrap" style="width: 100%">
+                    <div class="column" style="width: 100%">
                       <div>Adults</div>
-                      <div>
+                      <div class="row q-mt-xs">
                         <q-chip
                           v-for="status in RSVP_STATUSES_WITH_UNKNOWN"
                           :key="status"
@@ -119,11 +120,13 @@
 
                   <div class="rsvp-status-container q-mt-sm">
                     <div
+                      class="rsvp-status-column"
                       v-for="status in RSVP_STATUSES_WITH_UNKNOWN"
                       :key="status"
-                      class="rsvp-status-column"
                     >
-                      <div class="text-subtitle2">{{ status }}</div>
+                      <div class="text-subtitle2">
+                        {{ status }} ({{ rsvpList(game, status, type).length }})
+                      </div>
                       <q-list class="q-mt-sm">
                         <q-item
                           v-for="user in rsvpList(game, status, 'adult')"
@@ -157,10 +160,11 @@
                   dense
                   expand-separator
                 >
+                  <!-- Kids header -->
                   <template #header>
-                    <div class="row items-center justify-between no-wrap" style="width: 100%">
+                    <div class="column" style="width: 100%">
                       <div>Kids</div>
-                      <div>
+                      <div class="row q-mt-xs">
                         <q-chip
                           v-for="status in RSVP_STATUSES_WITH_UNKNOWN"
                           :key="status"
@@ -176,11 +180,13 @@
 
                   <div class="rsvp-status-container q-mt-sm">
                     <div
+                      class="rsvp-status-column"
                       v-for="status in RSVP_STATUSES_WITH_UNKNOWN"
                       :key="status"
-                      class="rsvp-status-column"
                     >
-                      <div class="text-subtitle2">{{ status }}</div>
+                      <div class="text-subtitle2">
+                        {{ status }} ({{ rsvpList(game, status, 'kid').length }})
+                      </div>
                       <q-list class="q-mt-sm">
                         <q-item
                           v-for="user in rsvpList(game, status, 'kid')"
@@ -410,7 +416,7 @@ onMounted(async () => {
 }
 
 .rsvp-status-column {
-  flex: 0 0 90px; /* default for mobile */
+  flex: 0 0 80px; /* default for mobile */
   min-width: 70px;
   max-width: 130px;
 }
