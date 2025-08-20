@@ -1,0 +1,12 @@
+services:
+  traefik:
+    ports:
+      - '8080:80' # access at http://localhost:8080
+
+  frontend:
+    ports:
+      - '9000:80' # optional: expose directly if needed
+
+  backend:
+    ports:
+      - '8090:8090' # expose pocketbase directly
