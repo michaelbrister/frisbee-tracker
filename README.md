@@ -63,27 +63,33 @@ Make sure pb_data/hooks/crons.js (with your cron logic) is inside the pocketbase
 
 Traefik automatically provisions Let's Encrypt TLS certificates
 
-Build the Docker image:
+Build and run the Docker image:
+
+```bash
+docker-compose up --build
+```
+
+Run the Docker image in the background:
+
+```bash
+docker-compose up -d
+```
+
+Build the frisbee-tracker Docker image:
 
 ```bash
 docker build -t frisbee-tracker .
 docker build -t frisbee-tracker-pocketbase -f Dockerfile-Pocketbase .
 ```
 
-Run the Docker image:
+Run the frisbee-tracker Docker image:
 
 ```bash
 docker run -p 8080:80 frisbee-tracker
 ```
 
+Run the PocketBase Docker image:
+
 ```bash
 docker run -p 8090:8090 -v pb_data:/pb_data frisbee-tracker-pocketbase
-```
-
-```bash
-docker-compose up -d
-```
-
-```bash
-docker-compose up --build
 ```
