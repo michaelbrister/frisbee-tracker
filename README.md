@@ -93,3 +93,14 @@ Run the PocketBase Docker image:
 ```bash
 docker run -p 8090:8090 -v pb_data:/pb_data frisbee-tracker-pocketbase
 ```
+
+Access URLs
+| Service | URL | Notes |
+| --------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------- |
+| Traefik Dashboard | [https://traefik.127.0.0.1.nip.io/dashboard/](https://traefik.127.0.0.1.nip.io/dashboard/) | Basic auth: `admin` / `admin` |
+| Frontend SPA | [https://frontend.127.0.0.1.nip.io](https://frontend.127.0.0.1.nip.io) | Secured via Let's Encrypt |
+| Backend API | [https://backend.127.0.0.1.nip.io/api](https://backend.127.0.0.1.nip.io/api) | Secured via Let's Encrypt |
+| Backend Dashboard | [https://backend.127.0.0.1.nip.io/\_/](https://backend.127.0.0.1.nip.io/_/) | PocketBase admin UI |
+| Direct frontend (dev only) | [http://localhost:9000](http://localhost:9000) | Bypasses Traefik |
+| Direct backend (dev only) | [http://localhost:8090](http://localhost:8090) | Bypasses Traefik |
+| Traefik dashboard HTTP (dev only) | [http://localhost:8080](http://localhost:8080) | Redirects to HTTPS dashboard |

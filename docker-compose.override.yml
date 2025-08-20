@@ -1,12 +1,13 @@
 services:
   traefik:
     ports:
-      - '8080:80' # access at http://localhost:8080
+      - '80:80'
+      - '8080:8080' # dashboard accessible at http://localhost:8080
 
   frontend:
     ports:
-      - '9000:80' # optional: expose directly if needed
+      - '9000:80' # direct access, optional
 
   backend:
     ports:
-      - '8090:8090' # expose pocketbase directly
+      - '8090:8090' # direct access, optional
