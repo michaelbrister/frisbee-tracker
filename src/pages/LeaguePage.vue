@@ -28,8 +28,8 @@
           </div>
 
           <div v-else>
-            <div v-for="game in upcomingGames" :key="game.id" class="q-mb-xl">
-              <q-card flat bordered class="q-pa-md" v-if="allUsers.length && game?.rsvps">
+            <div v-for="game in processedGames" :key="game.id" class="q-mb-xl">
+              <q-card flat bordered class="q-pa-md">
                 <div class="row justify-between items-center q-mb-sm">
                   <div>
                     <div class="text-subtitle1">
@@ -45,9 +45,7 @@
                 </div>
                 <q-separator class="q-my-md" />
 
-                <!-- RSVP buttons for logged-in user and children -->
                 <div v-if="pb.authStore.isValid && currentUser" class="q-mt-md">
-                  <!-- Current user RSVP -->
                   <div class="q-mt-md">
                     <div class="text-subtitle2 q-mb-xs">Your RSVP:</div>
                     <div class="row q-col-gutter-sm q-mb-sm">
@@ -68,7 +66,6 @@
                     </div>
                   </div>
 
-                  <!-- Children RSVP -->
                   <div v-for="child in getChildren(currentUser.id)" :key="child.id" class="q-mt-sm">
                     <div class="text-subtitle2 q-mb-xs">{{ child.name }}'s RSVP:</div>
                     <div class="row q-col-gutter-sm q-mb-sm">
@@ -91,125 +88,9 @@
                 </div>
                 <q-separator />
 
-                <!-- Adults RSVP Collapsible -->
-                <q-expansion-item
-                  icon="person"
-                  label="Adults"
-                  class="q-mb-md"
-                  :header-class="'text-h6'"
-                  dense
-                  expand-separator
-                >
-                  <!-- Adults header -->
-                  <template #header>
-                    <div class="column" style="width: 100%">
-                      <div>Adults</div>
-                      <div class="row q-mt-xs">
-                        <q-chip
-                          v-for="status in RSVP_STATUSES_WITH_UNKNOWN"
-                          :key="status"
-                          :color="statusColor(status)"
-                          text-color="white"
-                          dense
-                          class="q-ml-sm"
-                          :label="`${rsvpList(game, status, 'adult').length} ${status}`"
-                        />
-                      </div>
-                    </div>
-                  </template>
+                <RsvpList title="Adults" icon="person" :users="game.rsvpsByStatus.adult" />
 
-                  <div class="rsvp-status-container q-mt-sm">
-                    <div
-                      class="rsvp-status-column"
-                      v-for="status in RSVP_STATUSES_WITH_UNKNOWN"
-                      :key="status"
-                    >
-                      <div class="text-subtitle2">
-                        {{ status }} ({{ rsvpList(game, status, type).length }})
-                      </div>
-                      <q-list class="q-mt-sm">
-                        <q-item
-                          v-for="user in rsvpList(game, status, 'adult')"
-                          :key="user.id"
-                          class="q-pa-none"
-                        >
-                          <q-item-section class="q-pa-none">
-                            <div class="row items-center justify-between no-wrap">
-                              <div class="ellipsis">{{ user.name }}</div>
-                              <q-chip
-                                :color="statusColor(status)"
-                                text-color="white"
-                                dense
-                                label
-                                class="q-ml-sm"
-                              />
-                            </div>
-                          </q-item-section>
-                        </q-item>
-                      </q-list>
-                    </div>
-                  </div>
-                </q-expansion-item>
-
-                <!-- Kids RSVP Collapsible -->
-                <q-expansion-item
-                  icon="child_care"
-                  label="Kids"
-                  class="q-mb-md"
-                  :header-class="'text-h6'"
-                  dense
-                  expand-separator
-                >
-                  <!-- Kids header -->
-                  <template #header>
-                    <div class="column" style="width: 100%">
-                      <div>Kids</div>
-                      <div class="row q-mt-xs">
-                        <q-chip
-                          v-for="status in RSVP_STATUSES_WITH_UNKNOWN"
-                          :key="status"
-                          :color="statusColor(status)"
-                          text-color="white"
-                          dense
-                          class="q-ml-sm"
-                          :label="`${rsvpList(game, status, 'kid').length} ${status}`"
-                        />
-                      </div>
-                    </div>
-                  </template>
-
-                  <div class="rsvp-status-container q-mt-sm">
-                    <div
-                      class="rsvp-status-column"
-                      v-for="status in RSVP_STATUSES_WITH_UNKNOWN"
-                      :key="status"
-                    >
-                      <div class="text-subtitle2">
-                        {{ status }} ({{ rsvpList(game, status, 'kid').length }})
-                      </div>
-                      <q-list class="q-mt-sm">
-                        <q-item
-                          v-for="user in rsvpList(game, status, 'kid')"
-                          :key="user.id"
-                          class="q-pa-none"
-                        >
-                          <q-item-section class="q-pa-none">
-                            <div class="row items-center justify-between no-wrap">
-                              <div class="ellipsis">{{ user.name }}</div>
-                              <q-chip
-                                :color="statusColor(status)"
-                                text-color="white"
-                                dense
-                                label
-                                class="q-ml-sm"
-                              />
-                            </div>
-                          </q-item-section>
-                        </q-item>
-                      </q-list>
-                    </div>
-                  </div>
-                </q-expansion-item>
+                <RsvpList title="Kids" icon="child_care" :users="game.rsvpsByStatus.kid" />
               </q-card>
             </div>
           </div>
@@ -220,11 +101,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Notify } from 'quasar'
 import pb from '../services/pocketbase'
 import { DateTime } from 'luxon'
+import RsvpList from 'src/components/RsvpList.vue' // <-- Import the new component
 
 const router = useRouter()
 const upcomingGames = ref([])
@@ -235,6 +117,47 @@ const loading = ref(true)
 
 const RSVP_STATUSES = ['In', 'Maybe', 'Out']
 const RSVP_STATUSES_WITH_UNKNOWN = ['In', 'Maybe', 'Out', 'Unknown']
+
+// --- NEW: Computed property for high-performance data processing ---
+const processedGames = computed(() => {
+  if (!upcomingGames.value.length || !allUsers.value.length) return []
+
+  const usersById = new Map(allUsers.value.map((user) => [user.id, user]))
+
+  return upcomingGames.value.map((game) => {
+    const rsvps = {
+      adult: { In: [], Maybe: [], Out: [], Unknown: [] },
+      kid: { In: [], Maybe: [], Out: [], Unknown: [] },
+    }
+
+    const rsvpUserIds = new Set(game.rsvps.map((r) => r.user))
+
+    game.rsvps.forEach((rsvp) => {
+      const user = usersById.get(rsvp.user)
+      if (!user) return
+      const type = user.parent ? 'kid' : 'adult'
+      rsvps[type][rsvp.status].push(user)
+    })
+
+    allUsers.value.forEach((user) => {
+      if (!rsvpUserIds.has(user.id)) {
+        const type = user.parent ? 'kid' : 'adult'
+        rsvps[type]['Unknown'].push(user)
+      }
+    })
+
+    for (const type of ['adult', 'kid']) {
+      for (const status of RSVP_STATUSES_WITH_UNKNOWN) {
+        rsvps[type][status].sort((a, b) => a.name.localeCompare(b.name))
+      }
+    }
+
+    return {
+      ...game,
+      rsvpsByStatus: rsvps,
+    }
+  })
+})
 
 const loadUser = async () => {
   currentUser.value = pb.authStore.model
@@ -250,75 +173,47 @@ const loadAllUsers = async () => {
   }
 }
 
+// --- NEW: Optimized loadGames function ---
 const loadGames = async () => {
   try {
-    loading.value = true
+    // No need to set loading.value = true here if refreshData handles it
     const games = await pb.collection('games').getFullList({
       sort: 'date',
       filter: 'active=true',
     })
-    for (const g of games) {
-      const attendance = await pb.collection('attendance').getFullList({
-        filter: `game='${g.id}'`,
-      })
-      g.rsvps = attendance || []
+
+    const gameIds = games.map((g) => g.id)
+    if (gameIds.length === 0) {
+      upcomingGames.value = []
+      return
     }
+
+    const filter = gameIds.map((id) => `game='${id}'`).join('||')
+    const allRsvps = await pb.collection('attendance').getFullList({ filter })
+
+    games.forEach((game) => {
+      game.rsvps = allRsvps.filter((rsvp) => rsvp.game === game.id)
+    })
+
     upcomingGames.value = games
   } catch (err) {
     console.error('Error loading upcoming games', err)
     Notify.create({ type: 'negative', message: 'Failed to load games' })
-  } finally {
-    loading.value = false
   }
 }
 
 const refreshData = async (done) => {
-  await loadUser()
-  await loadAllUsers()
-  await loadGames()
-  done()
-}
-
-const rsvpList = (game, status, type = 'adult') => {
-  if (!allUsers.value.length || !game?.rsvps) return []
-
-  const list = allUsers.value.map((user) => {
-    const attendance = game.rsvps.find((a) => a?.user === user.id)
-    return {
-      id: user.id,
-      name: user.name || user.email || 'Unknown',
-      status: attendance?.status || 'Unknown',
-      parentId: typeof user.parent === 'string' ? user.parent : user.parent?.id || null,
-    }
-  })
-
-  const filtered = list.filter((u) => u.status === status)
-
-  if (type === 'adult') {
-    return filtered.filter((u) => !u.parentId).sort((a, b) => a.name.localeCompare(b.name))
-  } else {
-    return filtered.filter((u) => u.parentId).sort((a, b) => a.name.localeCompare(b.name))
-  }
-}
-
-const statusColor = (status) => {
-  switch (status) {
-    case 'In':
-      return 'green'
-    case 'Maybe':
-      return 'orange'
-    case 'Out':
-      return 'red'
-    case 'Unknown':
-      return 'grey'
-    default:
-      return 'grey'
+  loading.value = true
+  await Promise.all([loadUser(), loadAllUsers(), loadGames()])
+  loading.value = false
+  if (done) {
+    done()
   }
 }
 
 const totalRSVPCount = (game) => {
   if (!game?.rsvps) return 0
-  return game.rsvps.length
+  return game.rsvps.filter((r) => r.status === 'In').length
 }
 
 const getCurrentRSVP = (game, userId = null) => {
@@ -330,27 +225,17 @@ const getCurrentRSVP = (game, userId = null) => {
 
 const setRSVP = async (gameId, status, userId) => {
   if (!pb.authStore.isValid || !userId) return
-
   const user = allUsers.value.find((u) => u.id === userId)
-  if (!user) return
-
-  if (!RSVP_STATUSES.includes(status)) {
-    Notify.create({ type: 'negative', message: 'Invalid status' })
-    return
-  }
+  if (!user || !RSVP_STATUSES.includes(status)) return
 
   try {
-    const result = await pb.collection('attendance').getList(1, 1, {
-      filter: `game='${gameId}' && user='${userId}'`,
-    })
+    const existingRsvp = await pb
+      .collection('attendance')
+      .getFirstListItem(`game='${gameId}' && user='${userId}'`)
+      .catch(() => null)
 
-    if (result.items.length > 0) {
-      await pb.collection('attendance').update(result.items[0].id, {
-        name: user.name,
-        status,
-        user: userId,
-        game: gameId,
-      })
+    if (existingRsvp) {
+      await pb.collection('attendance').update(existingRsvp.id, { status })
     } else {
       await pb.collection('attendance').create({
         name: user.name,
@@ -359,27 +244,20 @@ const setRSVP = async (gameId, status, userId) => {
         game: gameId,
       })
     }
-
-    await loadGames()
+    // No need to manually reload; real-time subscription will handle it.
     Notify.create({
       type: 'positive',
       message: `RSVP set for ${user.name}: ${status}`,
     })
   } catch (err) {
-    console.error('Error creating or updating RSVP:', err)
-    Notify.create({
-      type: 'negative',
-      message: 'Failed to set RSVP. Check user, game, and status.',
-    })
+    console.error('Error setting RSVP:', err)
+    Notify.create({ type: 'negative', message: 'Failed to set RSVP.' })
   }
 }
 
 const getChildren = (userId) => {
   if (!userId || !allUsers.value.length) return []
-  return allUsers.value.filter((u) => {
-    const parentId = typeof u.parent === 'string' ? u.parent : u.parent?.id || null
-    return parentId === userId
-  })
+  return allUsers.value.filter((u) => u.parent === userId)
 }
 
 const logout = () => {
@@ -393,17 +271,26 @@ const goToAdmin = () => {
 
 const formatToEastern = (datetimeStr) => {
   if (!datetimeStr) return ''
-  let dt = DateTime.fromISO(datetimeStr, { zone: 'utc' })
-  if (!dt.isValid) dt = DateTime.fromSQL(datetimeStr, { zone: 'utc' })
-  if (!dt.isValid) return 'Invalid DateTime'
-  return dt.setZone('America/New_York').toLocaleString(DateTime.DATETIME_MED)
+  return DateTime.fromISO(datetimeStr)
+    .setZone('America/New_York')
+    .toLocaleString(DateTime.DATETIME_MED)
+}
+
+// --- NEW: Real-time subscriptions and lifecycle hooks ---
+const handleRsvpChange = () => {
+  // Simply reload the game data when any RSVP changes
+  loadGames()
 }
 
 onMounted(async () => {
-  // Run these two in parallel to improve loading speed
-  await Promise.all([loadUser(), loadAllUsers()])
-  // Then load games (depends on users loaded)
-  await loadGames()
+  await refreshData() // Initial data load
+  // Subscribe to real-time changes
+  pb.collection('attendance').subscribe('*', handleRsvpChange)
+})
+
+onUnmounted(() => {
+  // Unsubscribe when the component is destroyed to prevent memory leaks
+  pb.collection('attendance').unsubscribe()
 })
 </script>
 
@@ -414,31 +301,10 @@ onMounted(async () => {
   overflow-x: auto;
   padding-bottom: 0.5rem;
 }
-
 .rsvp-status-column {
-  flex: 0 0 80px; /* default for mobile */
-  min-width: 70px;
-  max-width: 130px;
+  flex: 0 0 120px;
+  min-width: 100px;
 }
-
-@media (min-width: 768px) {
-  /* Desktop and larger tablets */
-  .rsvp-status-column {
-    flex: 0 0 160px; /* wider columns on desktop */
-    min-width: 140px;
-    max-width: 200px;
-  }
-}
-
-/* Smaller buttons on mobile */
-@media (max-width: 600px) {
-  .q-btn.dense {
-    min-width: 64px;
-    height: 36px;
-    font-size: 14px;
-  }
-}
-
 .ellipsis {
   overflow: hidden;
   white-space: nowrap;
