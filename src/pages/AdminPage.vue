@@ -22,13 +22,12 @@
 
         <!-- Existing Games Table -->
         <q-table
-          :rows="games"
+          :rows="rows"
           :columns="columns"
           row-key="id"
           flat
           bordered
           dense
-          :sort-method="sortByDate"
           :loading="isLoading"
           class="q-mt-md"
         >
@@ -56,7 +55,9 @@
                 />
               </q-td>
               <q-td key="title">{{ props.row.title }}</q-td>
-              <q-td key="date">{{ formatToEastern(props.row.date) }}</q-td>
+              <q-td key="date">
+                {{ formatToEastern(props.row.date, props.row.date_only) }}
+              </q-td>
               <q-td key="location">{{ props.row.location }}</q-td>
               <q-td key="actions">
                 <q-btn dense flat icon="edit" color="primary" @click="editGame(props.row)" />
@@ -66,6 +67,57 @@
                   icon="delete"
                   color="negative"
                   @click="confirmDelete(props.row)"
+                />
+              </q-td>
+              <q-td key="status">
+                <q-chip
+                  v-if="props.row.cancelled"
+                  color="negative"
+                  text-color="white"
+                  icon="event_busy"
+                  square
+                >
+                  Cancelled
+                </q-chip>
+                <q-chip v-else color="positive" text-color="white" icon="event_available" square>
+                  Scheduled
+                </q-chip>
+                <div
+                  v-if="props.row.cancelled && props.row.cancel_reason"
+                  class="text-grey-7 q-mt-xs"
+                >
+                  {{ props.row.cancel_reason }}
+                </div>
+              </q-td>
+
+              <q-td key="actions">
+                <q-btn dense flat icon="edit" color="primary" @click="editGame(props.row)" />
+                <q-btn
+                  dense
+                  flat
+                  icon="delete"
+                  color="negative"
+                  @click="confirmDelete(props.row)"
+                />
+
+                <!-- NEW: cancel / uncancel -->
+                <q-btn
+                  v-if="!props.row.cancelled"
+                  dense
+                  flat
+                  icon="event_busy"
+                  color="orange"
+                  label="Cancel"
+                  @click="promptCancel(props.row)"
+                />
+                <q-btn
+                  v-else
+                  dense
+                  flat
+                  icon="refresh"
+                  color="teal"
+                  label="Un-cancel"
+                  @click="uncancel(props.row)"
                 />
               </q-td>
             </q-tr>
@@ -80,7 +132,7 @@
           label-position="left"
           direction="up"
           class="fixed-bottom-right q-mr-md q-mb-md"
-          @click="showCreateDialog = true"
+          @click="showCreateDialog()"
         />
 
         <!-- Create/Edit Game Dialog -->
@@ -97,171 +149,219 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Notify, useQuasar } from 'quasar'
 import { DateTime } from 'luxon'
-import pb from '../services/pocketbase'
-import { useGameStore } from 'src/stores/gameStore.js'
+import pb from 'src/services/pocketbase'
+import { useGameStore } from 'src/stores/gameStore'
+import { getFrisbeeCronEnabled, setFrisbeeCronEnabled } from 'src/services/settingsService'
 import GameDialog from 'src/components/GameDialog.vue'
+import { storeToRefs } from 'pinia'
 
 const router = useRouter()
 const $q = useQuasar()
 
-// A reactive reference to hold the Pinia store instance. It starts as null.
-const gameStore = ref(null)
+/* ---------------- Pinia ---------------- */
+const gameStore = useGameStore()
+const { games, isLoading } = storeToRefs(gameStore)
+
+/* ---------------- Local state ---------------- */
 const frisbeeCronEnabled = ref(false)
 const showGameDialog = ref(false)
 const isEditMode = ref(false)
 const dialogGameData = ref({})
 
-// Define the columns for the QTable
+/* ---------------- Table columns ---------------- */
 const columns = [
   { name: 'active', label: 'Active', field: 'active', sortable: false, align: 'center' },
   { name: 'title', label: 'Title', field: 'title', sortable: true, align: 'left' },
   { name: 'date', label: 'Date', field: 'date', sortable: true, align: 'left' },
   { name: 'location', label: 'Location', field: 'location', sortable: true, align: 'left' },
+  { name: 'status', label: 'Status', field: 'cancelled', sortable: true, align: 'left' },
   { name: 'actions', label: 'Actions', field: 'actions', sortable: false, align: 'center' },
 ]
 
-// These computed properties now safely check if the store is available.
-const games = computed(() => (gameStore.value ? gameStore.value.games : []))
-const isLoading = computed(() => (gameStore.value ? gameStore.value.isLoading : true))
+/* ---------------- Rows (array, not ref) ---------------- */
+const rows = computed(() => games.value ?? [])
 
-// We will now check if the store is available on mount and handle the case where it isn't.
-onMounted(() => {
+/* ---------------- Lifecycle ---------------- */
+onMounted(async () => {
   try {
-    gameStore.value = useGameStore()
-    // Add a check to verify Pinia is running
-    if (gameStore.value) {
-      console.log('Pinia is running. Game store initialized successfully.')
-      console.log('AdminPage.vue mounted. Fetching games...')
-      gameStore.value.fetchGames()
-      loadCronFlag()
-    } else {
-      console.error('Pinia store not available during onMounted.')
-      Notify.create({
-        type: 'negative',
-        message:
-          'Could not initialize the game store. Please ensure Pinia is set up correctly in your main application file.',
-      })
-    }
-  } catch (error) {
-    console.error('Failed to initialize game store:', error)
-    Notify.create({
-      type: 'negative',
-      message: 'Failed to load game data. Please try refreshing.',
-    })
+    await gameStore.fetchGames()
+    await loadCronFlag()
+  } catch (e) {
+    console.error(e)
   }
 })
 
+/* ---------------- Nav ---------------- */
 function logout() {
   pb.authStore.clear()
   router.push({ name: 'login' })
 }
-
 function goToLeague() {
   router.push({ name: 'league' })
 }
 
-function formatToEastern(datetimeStr) {
-  if (!datetimeStr) return ''
-  return DateTime.fromSQL(datetimeStr, { zone: 'utc' })
-    .setZone('America/New_York')
-    .toLocaleString(DateTime.DATETIME_MED)
+/* ---------------- Dialogs: cancel/uncancel ---------------- */
+function promptCancel(row) {
+  $q.dialog({
+    title: 'Cancel Game',
+    message: `Provide a reason for cancelling ${formatToEastern(row.date)}:`,
+    prompt: {
+      model: '',
+      type: 'text',
+      isValid: (val) => (val || '').trim().length > 0,
+      label: 'Reason',
+      outlined: true,
+    },
+    cancel: true,
+    persistent: true,
+  }).onOk(async (reason) => {
+    try {
+      await gameStore.cancelGame(row.id, reason.trim())
+      Notify.create({ type: 'warning', message: 'Game cancelled.' })
+    } catch (e) {
+      console.error(e)
+      Notify.create({ type: 'negative', message: 'Failed to cancel game.' })
+    }
+  })
 }
 
-function sortByDate(a, b) {
-  return new Date(a.date).getTime() - new Date(b.date).getTime()
+function uncancel(row) {
+  $q.dialog({
+    title: 'Un-cancel Game',
+    message: `Mark ${formatToEastern(row.date)} as scheduled again?`,
+    cancel: true,
+    persistent: true,
+  }).onOk(async () => {
+    try {
+      await gameStore.uncancelGame(row.id)
+      Notify.create({ type: 'positive', message: 'Game restored.' })
+    } catch (e) {
+      console.error(e)
+      Notify.create({ type: 'negative', message: 'Failed to restore game.' })
+    }
+  })
 }
 
-const showCreateDialog = () => {
+/* ---------------- Date helpers ---------------- */
+function formatToEastern(datetimeStr, dateOnlyStr) {
+  if (datetimeStr) {
+    let dt = DateTime.fromISO(datetimeStr, { zone: 'utc' })
+    if (!dt.isValid) dt = DateTime.fromSQL(datetimeStr, { zone: 'utc' })
+    if (dt.isValid) return dt.setZone('America/New_York').toLocaleString(DateTime.DATETIME_MED)
+  }
+  if (dateOnlyStr) {
+    const dt = DateTime.fromFormat(dateOnlyStr, 'yyyy-MM-dd', { zone: 'America/New_York' })
+    if (dt.isValid) return dt.toLocaleString(DateTime.DATE_MED)
+  }
+  return '—'
+}
+
+/* ---------------- Create/Edit ---------------- */
+function showCreateDialog() {
   isEditMode.value = false
   dialogGameData.value = {
     title: 'Frisbee',
     location: 'Bird Street Park',
-    date: getNextFriday(),
+    date: getNextFriday(), // yyyy-MM-dd
     time: '05:30 PM',
   }
   showGameDialog.value = true
 }
 
-const editGame = (game) => {
+function editGame(game) {
   isEditMode.value = true
-  const dt = DateTime.fromSQL(game.date, { zone: 'utc' }).setZone('America/New_York')
+  // PB stores ISO; parse ISO first, then fallback to SQL
+  let dt = DateTime.fromISO(game.date, { zone: 'utc' })
+  if (!dt.isValid) dt = DateTime.fromSQL(game.date, { zone: 'utc' })
+  const est = dt.isValid ? dt.setZone('America/New_York') : null
+
   dialogGameData.value = {
     ...game,
-    date: dt.toISODate(),
-    time: dt.toFormat('hh:mm a'),
+    date: est ? est.toISODate() : game.date_only || '',
+    time: est ? est.toFormat('hh:mm a') : game.time || '05:30 PM',
   }
   showGameDialog.value = true
 }
 
-const handleSave = async (gameData) => {
-  if (!gameStore.value) {
-    Notify.create({ type: 'negative', message: 'Store not ready.' })
-    return
-  }
+async function handleSave(gameData) {
   try {
     if (isEditMode.value) {
-      await gameStore.value.updateGame(gameData)
+      await gameStore.updateGame(gameData)
     } else {
-      await gameStore.value.createGame(gameData)
+      await gameStore.createGame(gameData)
     }
     resetDialog()
   } catch (err) {
+    console.error(err)
+    const isDuplicate = err?.response?.data?.data?.date_only?.message?.includes('must be unique')
     Notify.create({
       type: 'negative',
-      message: `Failed to ${isEditMode.value ? 'update' : 'create'} game.`,
+      message: isDuplicate
+        ? 'A game already exists on that day. Please edit the existing game instead.'
+        : `Failed to ${isEditMode.value ? 'update' : 'create'} game.`,
     })
-    console.error(err)
+    if (isDuplicate) {
+      highlightGameByDate(gameData.date)
+    }
   }
 }
 
-const confirmDelete = (game) => {
-  if (!gameStore.value) {
-    Notify.create({ type: 'negative', message: 'Store not ready.' })
-    return
+async function highlightGameByDate(dateStr) {
+  try {
+    const existing = await gameStore.findGameByDate(dateStr)
+    if (existing) editGame(existing)
+  } catch (err) {
+    console.error('Could not find existing game for navigation:', err)
   }
+}
+
+function confirmDelete(game) {
   $q.dialog({
     title: 'Confirm',
     message: `Are you sure you want to delete the game on ${formatToEastern(game.date)}?`,
     cancel: true,
     persistent: true,
   }).onOk(async () => {
-    await gameStore.value.deleteGame(game.id)
+    try {
+      await gameStore.deleteGame(game.id)
+      Notify.create({ type: 'info', message: 'Game deleted.' })
+    } catch (e) {
+      console.error(e)
+      Notify.create({ type: 'negative', message: 'Failed to delete game.' })
+    }
   })
 }
 
-const setActiveGame = (selectedGame) => {
-  if (gameStore.value) {
-    gameStore.value.setActiveGame(selectedGame)
-  }
+function setActiveGame(selectedGame) {
+  gameStore.setActiveGame(selectedGame)
 }
 
-const resetDialog = () => {
+function resetDialog() {
   showGameDialog.value = false
   isEditMode.value = false
   dialogGameData.value = {}
 }
 
-// Utility for creating games
+/* ---------------- Utilities ---------------- */
 function getNextFriday() {
   const now = new Date()
   const day = now.getDay()
   const daysUntilFriday = (5 - day + 7) % 7 || 7
   const nextFriday = new Date(now)
   nextFriday.setDate(now.getDate() + daysUntilFriday)
-  return nextFriday.toISOString().split('T')[0]
+  return nextFriday.toISOString().split('T')[0] // yyyy-MM-dd
 }
 
-// Cron functions
+/* ---------------- Cron flag (no auto-cancel, upsert) ---------------- */
 async function loadCronFlag() {
   try {
-    const settings = await pb.collection('settings').getFullList()
-    const setting = settings.find((s) => s.key === 'frisbee_cron')
-    frisbeeCronEnabled.value = !!setting?.value
+    frisbeeCronEnabled.value = await getFrisbeeCronEnabled()
   } catch (err) {
+    // 404 here would mean your seed record doesn't exist yet
     console.error('Failed to load cron flag:', err)
     frisbeeCronEnabled.value = false
   }
@@ -269,26 +369,22 @@ async function loadCronFlag() {
 
 async function toggleCronFlag() {
   try {
-    const settings = await pb.collection('settings').getFullList()
-    const setting = settings.find((s) => s.key === 'frisbee_cron')
-    if (setting) {
-      await pb.collection('settings').update(setting.id, {
-        value: frisbeeCronEnabled.value,
-      })
-    } else {
-      await pb.collection('settings').create({
-        key: 'frisbee_cron',
-        value: frisbeeCronEnabled.value,
-      })
-    }
+    const next = !frisbeeCronEnabled.value
+    // optimistic UI
+    frisbeeCronEnabled.value = next
+
+    const saved = await setFrisbeeCronEnabled(next)
+    frisbeeCronEnabled.value = saved
+
     Notify.create({
-      type: 'positive',
-      message: `Frisbee cron ${frisbeeCronEnabled.value ? 'enabled' : 'disabled'}`,
+      type: saved ? 'positive' : 'warning',
+      message: `Frisbee cron ${saved ? 'enabled' : 'disabled'}`,
     })
   } catch (err) {
     console.error('Failed to update cron flag:', err)
-    Notify.create({ type: 'negative', message: 'Failed to update cron flag' })
+    // revert optimistic UI on failure
     frisbeeCronEnabled.value = !frisbeeCronEnabled.value
+    Notify.create({ type: 'negative', message: 'Failed to update cron flag' })
   }
 }
 </script>

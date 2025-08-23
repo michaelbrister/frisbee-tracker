@@ -2,52 +2,91 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import pb from 'src/services/pocketbase'
 import { Notify } from 'quasar'
+import { DateTime } from 'luxon'
 
 export const useGameStore = defineStore('gameStore', () => {
   const games = ref([])
   const isLoading = ref(false)
 
-  // Fetch all games from PocketBase and update the local state.
   const fetchGames = async () => {
     isLoading.value = true
     try {
-      games.value = await pb.collection('games').getFullList({ sort: 'date' })
+      const records = await pb.collection('games').getFullList({ sort: 'date' })
+      games.value = records
+      return records
     } catch (err) {
       console.error('Failed to load games:', err)
       Notify.create({ type: 'negative', message: 'Failed to load games.' })
+      throw err
     } finally {
       isLoading.value = false
     }
   }
 
-  // Create a new game and add it to the local state.
-  const createGame = async (gameData) => {
+  async function findGameByDate(dateOnlyStr) {
     try {
-      const createdGame = await pb.collection('games').create(gameData)
-      games.value.push(createdGame) // Optimistic UI update
-      Notify.create({ type: 'positive', message: 'Game created!' })
-    } catch (err) {
-      console.error('Failed to create game:', err)
-      const msg = err?.response?.data?.date?.[0] || 'An unknown error occurred.'
-      Notify.create({ type: 'negative', message: `Failed to create game: ${msg}` })
-      throw err
+      return await pb.collection('games').getFirstListItem(`date_only = "${dateOnlyStr}"`)
+    } catch {
+      return null
     }
   }
 
-  // Update an existing game and update the local state.
-  const updateGame = async (gameData) => {
-    try {
-      const updatedGame = await pb.collection('games').update(gameData.id, gameData)
-      const index = games.value.findIndex((g) => g.id === gameData.id)
-      if (index !== -1) {
-        games.value[index] = updatedGame // Optimistic UI update
-      }
-      Notify.create({ type: 'positive', message: 'Game updated!' })
-    } catch (err) {
-      console.error('Failed to update game:', err)
-      Notify.create({ type: 'negative', message: 'Failed to update game.' })
-      throw err
-    }
+  // createGame / updateGame: include cancelled fields (default false)
+  async function createGame(gameData) {
+    const dateISO = normalizeToUTCISO(gameData.date, gameData.time)
+    const dateOnly = toDateOnly(gameData.date) || (dateISO && toDateOnly(dateISO))
+    if (!dateISO || !dateOnly) throw new Error('date and date_only required')
+
+    const created = await pb.collection('games').create({
+      title: gameData.title,
+      location: gameData.location,
+      date: dateISO,
+      date_only: dateOnly,
+      active: !!gameData.active,
+      cancelled: !!(gameData.cancelled ?? false),
+      cancel_reason: gameData.cancel_reason ?? null,
+      cancelled_at: gameData.cancelled ? new Date().toISOString() : null,
+    })
+    await fetchGames()
+    return created
+  }
+
+  async function updateGame(gameData) {
+    const dateISO = normalizeToUTCISO(gameData.date, gameData.time)
+    const dateOnly = toDateOnly(gameData.date) || (dateISO && toDateOnly(dateISO))
+    if (!dateISO || !dateOnly) throw new Error('date and date_only required')
+
+    const updated = await pb.collection('games').update(gameData.id, {
+      title: gameData.title,
+      location: gameData.location,
+      date: dateISO,
+      date_only: dateOnly,
+      active: !!gameData.active,
+      cancelled: !!(gameData.cancelled ?? false),
+      cancel_reason: gameData.cancel_reason ?? null,
+      cancelled_at: gameData.cancelled ? (gameData.cancelled_at ?? new Date().toISOString()) : null,
+    })
+    await fetchGames()
+    return updated
+  }
+
+  // NEW: cancel / uncancel helpers
+  async function cancelGame(gameId, reason) {
+    await pb.collection('games').update(gameId, {
+      cancelled: true,
+      cancel_reason: reason ?? 'No reason provided',
+      cancelled_at: new Date().toISOString(),
+    })
+    await fetchGames()
+  }
+
+  async function uncancelGame(gameId) {
+    await pb.collection('games').update(gameId, {
+      cancelled: false,
+      cancel_reason: null,
+      cancelled_at: null,
+    })
+    await fetchGames()
   }
 
   // Delete a game and remove it from the local state.
@@ -83,6 +122,34 @@ export const useGameStore = defineStore('gameStore', () => {
     }
   }
 
+  console.log('Loaded games:', games.value)
+
+  function normalizeToUTCISO(inputDate, inputTime) {
+    if (!inputDate) return null
+
+    // If already ISO datetime, trust it and normalize to UTC.
+    if (typeof inputDate === 'string' && inputDate.includes('T')) {
+      const dt = DateTime.fromISO(inputDate)
+      return dt.isValid ? dt.toUTC().toISO() : null
+    }
+
+    // Otherwise we expect date-only + time (e.g., "2025-08-29" + "05:30 PM")
+    if (!inputTime) return null
+
+    const dt = DateTime.fromFormat(`${inputDate} ${inputTime}`, 'yyyy-MM-dd hh:mm a', {
+      zone: 'America/New_York',
+    })
+    return dt.isValid ? dt.toUTC().toISO() : null
+  }
+
+  // Works for either ISO datetime or "yyyy-MM-dd"
+  function toDateOnly(input) {
+    if (!input) return null
+    let dt = DateTime.fromISO(input)
+    if (!dt.isValid) dt = DateTime.fromFormat(input, 'yyyy-MM-dd')
+    return dt.isValid ? dt.toISODate() : null
+  }
+
   return {
     games,
     isLoading,
@@ -91,5 +158,10 @@ export const useGameStore = defineStore('gameStore', () => {
     updateGame,
     deleteGame,
     setActiveGame,
+    findGameByDate,
+    normalizeToUTCISO,
+    toDateOnly,
+    cancelGame,
+    uncancelGame,
   }
 })
