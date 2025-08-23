@@ -30,23 +30,41 @@
           class="q-mb-sm"
           :rules="[(val) => !!val || 'Location is required']"
         />
-        <q-date
-          v-model="formData.date"
-          label="Game Date (Fridays Only)"
-          mask="YYYY-MM-DD"
-          :options="fridayOnly"
-          outlined
-          class="q-mb-sm"
-        />
-        <q-time
-          v-model="formData.time"
-          label="Game Time"
-          :format24h="false"
-          :with-seconds="false"
-          ampm
-          outlined
-          class="q-mb-sm"
-        />
+
+        <!-- Date & time pickers -->
+        <div v-if="pickerReady" class="row q-col-gutter-sm items-center">
+          <div class="col-12 col-sm-6">
+            <q-date
+              v-model="formData.date"
+              label="Game Date (Fridays Only)"
+              mask="YYYY-MM-DD"
+              :options="fridayOnly"
+              outlined
+              class="q-mb-sm"
+            />
+            <!-- New button -->
+            <q-btn
+              dense
+              outline
+              color="primary"
+              icon="event_available"
+              label="Next Friday"
+              class="q-mt-sm"
+              @click="setNextFriday"
+            />
+          </div>
+          <div class="col-12 col-sm-6">
+            <q-time
+              v-model="formData.time"
+              label="Game Time"
+              :format24h="false"
+              :with-seconds="false"
+              minimal
+              outlined
+              class="q-mb-sm"
+            />
+          </div>
+        </div>
 
         <div class="row justify-end q-mt-md">
           <q-btn flat label="Cancel" color="grey" @click="closeDialog" />
@@ -58,67 +76,97 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { DateTime } from 'luxon'
 import { Notify } from 'quasar'
 
+const TZ = 'America/New_York'
+
 const props = defineProps({
-  modelValue: {
-    type: Boolean,
-    required: true,
-  },
-  isEdit: {
-    type: Boolean,
-    default: false,
-  },
-  initialData: {
-    type: Object,
-    default: () => ({}),
-  },
+  modelValue: { type: Boolean, required: true },
+  isEdit: { type: Boolean, default: false },
+  initialData: { type: Object, default: () => ({}) },
 })
 
 const emit = defineEmits(['update:modelValue', 'save', 'close'])
 
-const formData = ref({})
+const formData = ref({
+  title: 'Frisbee',
+  location: 'Bird Street Park',
+  date: '', // YYYY-MM-DD (ET)
+  time: '05:30 PM', // keep 12h string
+})
 
-// Watch for changes to initialData to populate the form when the dialog opens
-watch(
-  () => props.initialData,
-  (newData) => {
-    if (newData) {
-      formData.value = { ...newData }
-    }
-  },
-  { immediate: true },
-)
+const pickerReady = ref(false)
 
-function fridayOnly(date) {
-  return new Date(date).getDay() === 5
+/* ---------- Utils ---------- */
+function nextFridayISODate() {
+  const now = DateTime.now().setZone(TZ)
+  const days = (5 - now.weekday + 7) % 7 || 7
+  return now.plus({ days }).toISODate()
 }
 
-function combineDateTimeToUTC(dateStr, timeStr) {
-  const dt = DateTime.fromFormat(`${dateStr} ${timeStr}`, 'yyyy-MM-dd hh:mm a', {
-    zone: 'America/New_York',
-  })
+function setNextFriday() {
+  formData.value.date = nextFridayISODate()
+}
+
+function fridayOnly(dateStr) {
+  const fmt = dateStr?.includes('/') ? 'yyyy/MM/dd' : 'yyyy-MM-dd'
+  const dt = DateTime.fromFormat(dateStr, fmt, { zone: TZ })
+  return dt.isValid && dt.weekday === 5
+}
+
+function combineDateTimeToUTC(dateStr, timeStr12h) {
+  const dt = DateTime.fromFormat(`${dateStr} ${timeStr12h}`, 'yyyy-MM-dd hh:mm a', { zone: TZ })
   if (!dt.isValid) throw new Error('Invalid time value')
   return dt.toUTC().toISO()
 }
 
+/* ---------- Seed ---------- */
+watch(
+  () => props.initialData,
+  (newData) => {
+    if (!newData) return
+    formData.value = { ...newData }
+  },
+  { immediate: true },
+)
+
+/* ---------- On open ---------- */
+watch(
+  () => props.modelValue,
+  async (open) => {
+    if (!open) {
+      pickerReady.value = false
+      return
+    }
+    pickerReady.value = false
+    await nextTick()
+
+    if (!props.isEdit) {
+      if (!formData.value.date) formData.value.date = nextFridayISODate()
+      if (!/(am|pm)/i.test(formData.value.time || '')) {
+        formData.value.time = '05:30 PM'
+      }
+    }
+
+    pickerReady.value = true
+  },
+)
+
+/* ---------- Submit ---------- */
 const submitForm = async () => {
-  if (
-    !formData.value.title ||
-    !formData.value.location ||
-    !formData.value.date ||
-    !formData.value.time
-  ) {
+  const { title, location, date, time } = formData.value
+  if (!title || !location || !date || !time) {
     Notify.create({ type: 'negative', message: 'All fields are required.' })
     return
   }
   try {
-    const utcISO = combineDateTimeToUTC(formData.value.date, formData.value.time)
+    const utcISO = combineDateTimeToUTC(date, time)
     const payload = {
       ...formData.value,
       date: utcISO,
+      date_only: date,
     }
     emit('save', payload)
   } catch (error) {
