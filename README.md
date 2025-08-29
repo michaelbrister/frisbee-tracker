@@ -4,7 +4,7 @@ Ultimate Frisbee League tracker app built with Vue.js and Quasar.
 Backend is a PocketBase instance.
 
 Built with [Quasar v2](https://quasar.dev).
-Build with [pocketbase-js](https://github.com/pocketbase/pocketbase-js).
+Build with [pocketbase](https://github.com/pocketbase/pocketbase).
 PocketBase v0.29.2
 
 ## Install the dependencies
