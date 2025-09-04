@@ -1,0 +1,34 @@
+services:
+  traefik:
+    command:
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.myresolver.acme.tlschallenge=true
+      - --certificatesresolvers.myresolver.acme.email=your-email@example.com
+      - --certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json
+      - --api.insecure=false
+      - --entrypoints.web.address=:80
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./letsencrypt:/letsencrypt
+
+    labels:
+      - traefik.http.routers.traefik.rule=Host(`traefik.yourdomain.com`)
+      - traefik.http.routers.traefik.entrypoints=websecure
+      - traefik.http.routers.traefik.tls.certresolver=myresolver
+      - traefik.http.routers.traefik.service=api@internal
+      - traefik.http.routers.traefik.middlewares=auth
+      - traefik.http.middlewares.auth.basicauth.users=admin:$apr1$H6uskkkW$IgXLP6ewTrSuBkTrqE8wj/
+
+  frontend:
+    labels:
+      - traefik.http.routers.frontend.entrypoints=websecure
+      - traefik.http.routers.frontend.tls.certresolver=myresolver
+
+  backend:
+    labels:
+      - traefik.http.routers.backend.entrypoints=websecure
+      - traefik.http.routers.backend.tls.certresolver=myresolver
+    volumes:
+      - pb_data:/app/pb_data

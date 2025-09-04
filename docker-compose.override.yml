@@ -1,0 +1,13 @@
+services:
+  traefik:
+    ports:
+      - '80:80'
+      - '8080:8080' # dashboard accessible at http://localhost:8080
+
+  frontend:
+    ports:
+      - '9000:80' # direct access, optional
+
+  backend:
+    ports:
+      - '8090:8090' # direct access, optional

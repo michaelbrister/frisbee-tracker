@@ -1,0 +1,68 @@
+version: '3.9'
+
+services:
+  traefik:
+    image: traefik:v3.5
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --api.dashboard=true
+      - --api.insecure=true # dev only
+      - --log.level=INFO
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.frontend.rule=Host(`frontend.127.0.0.1.nip.io`)
+      - traefik.http.routers.frontend.entrypoints=web
+      - traefik.http.services.frontend.loadbalancer.server.port=80
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./pocketbase
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.backend.rule=Host(`backend.127.0.0.1.nip.io`) && PathPrefix(`/api`)
+      - traefik.http.routers.backend.entrypoints=web
+      - traefik.http.services.backend.loadbalancer.server.port=8090
+      # strip /api before forwarding to PB
+      - traefik.http.routers.backend.middlewares=strip-api
+      - traefik.http.middlewares.strip-api.stripPrefix.prefixes=/api
+    volumes:
+      - pb_data:/app/pb_data
+    restart: unless-stopped
+
+  scheduler:
+    build: ./scheduler
+    environment:
+      PB_URL: 'http://backend:8090'
+      PB_ADMIN_EMAIL: 'admin@example.com'
+      PB_ADMIN_PASSWORD: 'supersecret'
+      TIMEZONE: 'America/New_York'
+      GAME_TITLE: 'Frisbee'
+      GAME_LOCATION: 'Bird Street Park'
+      GAME_TIME: '05:30 PM'
+      SETTINGS_COLLECTION: 'app_settings'
+      SETTINGS_SLUG: 'global'
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      # Use the same script in --healthcheck mode (quick auth + settings read)
+      test: ['CMD-SHELL', 'node /app/cron-frisbee.mjs --healthcheck >/dev/null 2>&1']
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  pb_data:
+  # scheduler_logs:
