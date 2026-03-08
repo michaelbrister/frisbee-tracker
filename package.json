@@ -9,9 +9,11 @@
   "scripts": {
     "lint": "eslint -c ./eslint.config.js \"./src*/**/*.{js,cjs,mjs,vue}\"",
     "format": "prettier --write \"**/*.{js,vue,scss,html,md,json}\" --ignore-path .gitignore",
-    "test": "echo \"No test specified\" && exit 0",
+    "test": "node --test test/**/*.test.js",
     "dev": "quasar dev",
     "build": "quasar build",
+    "seed:dummy": "node scheduler/reset-seed.mjs",
+    "seed:wipe": "node scheduler/reset-seed.mjs --wipe-only",
     "postinstall": "quasar prepare"
   },
   "dependencies": {

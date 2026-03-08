@@ -1,10 +1,9 @@
-version: '3.9'
-
 services:
   traefik:
-    image: traefik:v3.5
+    image: traefik:v2.11
     command:
       - --providers.docker=true
+      - --providers.docker.endpoint=unix:///var/run/docker.sock
       - --providers.docker.exposedbydefault=false
       - --entrypoints.web.address=:80
       - --api.dashboard=true
@@ -41,11 +40,13 @@ services:
     restart: unless-stopped
 
   scheduler:
-    build: ./scheduler
+    build:
+      context: .
+      dockerfile: scheduler/Dockerfile
     environment:
       PB_URL: 'http://backend:8090'
-      PB_ADMIN_EMAIL: 'admin@example.com'
-      PB_ADMIN_PASSWORD: 'supersecret'
+      PB_ADMIN_EMAIL: ${POCKETBASE_ADMIN_EMAIL}
+      PB_ADMIN_PASSWORD: ${POCKETBASE_ADMIN_PASSWORD}
       TIMEZONE: 'America/New_York'
       GAME_TITLE: 'Frisbee'
       GAME_LOCATION: 'Bird Street Park'

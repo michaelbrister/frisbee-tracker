@@ -1,6 +1,7 @@
 // scheduler/cron-frisbee.mjs
 import PocketBase from 'pocketbase'
 import { DateTime } from 'luxon'
+import { shouldResetRsvps } from './cron-utils.mjs'
 
 const {
   PB_URL,
@@ -12,6 +13,7 @@ const {
   GAME_TIME = '05:30 PM',
   SETTINGS_COLLECTION = 'app_settings',
   SETTINGS_SLUG = 'global',
+  RESET_HOUR = '22',
 } = process.env
 
 const argv = new Set(process.argv.slice(2))
@@ -42,19 +44,32 @@ async function ensureAdmin() {
 }
 
 async function getSettings() {
-  return pb.collection(SETTINGS_COLLECTION).getFirstListItem(`slug = "${SETTINGS_SLUG}"`, {
-    $autoCancel: false,
-  })
+  try {
+    return await pb.collection(SETTINGS_COLLECTION).getFirstListItem(`slug = "${SETTINGS_SLUG}"`, {
+      $autoCancel: false,
+    })
+  } catch (err) {
+    if (err?.status === 404) return null
+    throw err
+  }
 }
 
 async function upsertNextFridayGame() {
+  const now = DateTime.now().setZone(TIMEZONE)
+  const resetHour = Number.parseInt(RESET_HOUR, 10)
   const dateOnly = nextFridayDateOnly(TIMEZONE)
   const dateISO = toUTCISO(dateOnly, GAME_TIME, TIMEZONE)
 
   // 1) Check toggle
   const settings = await getSettings()
+  if (!settings) {
+    return { skipped: true, reason: 'settings record not found' }
+  }
   if (!settings?.frisbee_cron) {
     return { skipped: true, reason: 'frisbee_cron disabled' }
+  }
+  if (settings?.rsvp_paused ?? settings?.season_over) {
+    return { skipped: true, reason: 'rsvp_paused enabled' }
   }
 
   // 2) Pull existing game for that day (if any)
@@ -130,23 +145,66 @@ async function upsertNextFridayGame() {
     await pb.collection('games').update(g.id, { active: false }, { $autoCancel: false })
   }
 
-  return { ok: true, targetId, date_only: dateOnly, deactivatedOthers: others.map((o) => o.id) }
+  let resetTriggered = false
+  let rsvpsReset = 0
+
+  // Friday night reset: clear next game's RSVPs so everyone responds again.
+  if (shouldResetRsvps(now, resetHour)) {
+    const existingRsvps = await pb.collection('attendance').getFullList({
+      filter: `game = "${targetId}"`,
+      $autoCancel: false,
+    })
+    for (const rsvp of existingRsvps) {
+      await pb.collection('attendance').delete(rsvp.id, { $autoCancel: false })
+    }
+    resetTriggered = true
+    rsvpsReset = existingRsvps.length
+  }
+
+  return {
+    ok: true,
+    targetId,
+    date_only: dateOnly,
+    deactivatedOthers: others.map((o) => o.id),
+    resetTriggered,
+    rsvpsReset,
+  }
+}
+
+async function recordCronRun({ source, status, details = '', result = null }) {
+  try {
+    await pb.collection('cron_runs').create(
+      {
+        source,
+        status: !!status,
+        reset_triggered: !!result?.resetTriggered,
+        rsvps_reset: result?.rsvpsReset != null ? String(result.rsvpsReset) : '0',
+        run_for_date: result?.date_only || '',
+        details,
+      },
+      { $autoCancel: false },
+    )
+  } catch (err) {
+    // Keep scheduler resilient if cron_runs doesn't exist yet.
+    console.warn('Could not persist cron run status:', err?.message || err)
+  }
 }
 
 async function main() {
   try {
-    await ensureAdmin()
-
     if (HEALTH) {
-      // Minimal: verify we can read settings
-      const settings = await getSettings()
-      if (!settings) throw new Error('settings not found')
+      // Minimal: verify backend is reachable without requiring admin credentials.
+      await pb.send('/api/health', { method: 'GET', $autoCancel: false })
       console.log(JSON.stringify({ ok: true, health: true }))
       process.exit(0)
     }
 
+    await ensureAdmin()
+
     const start = DateTime.now().toISO()
     const result = await upsertNextFridayGame()
+    const details = result?.skipped ? `Skipped: ${result.reason}` : 'Run completed'
+    await recordCronRun({ source: 'scheduler', status: true, details, result })
     console.log(JSON.stringify({ ok: true, start, result }, null, 2))
     process.exit(0)
   } catch (err) {
@@ -155,6 +213,12 @@ async function main() {
       ? { status: err.status, data: err.response.data }
       : { message: err?.message || String(err) }
     console.error('cron-frisbee error:', JSON.stringify(detail))
+    await recordCronRun({
+      source: 'scheduler',
+      status: false,
+      details: `Error: ${detail?.message || 'unknown error'}`,
+      result: null,
+    })
     process.exit(1)
   }
 }

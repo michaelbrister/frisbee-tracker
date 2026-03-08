@@ -77,10 +77,14 @@
 
 <script setup>
 import { ref, watch, nextTick } from 'vue'
-import { DateTime } from 'luxon'
 import { Notify } from 'quasar'
-
-const TZ = 'America/New_York'
+import {
+  APP_TIMEZONE,
+  DEFAULT_GAME_LOCATION,
+  DEFAULT_GAME_TIME,
+  DEFAULT_GAME_TITLE,
+} from 'src/constants/app'
+import { combineDateTimeToUTC, isFridayDate, nextFridayISODate } from 'src/utils/dates'
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -91,35 +95,20 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'save', 'close'])
 
 const formData = ref({
-  title: 'Frisbee',
-  location: 'Bird Street Park',
+  title: DEFAULT_GAME_TITLE,
+  location: DEFAULT_GAME_LOCATION,
   date: '', // YYYY-MM-DD (ET)
-  time: '05:30 PM', // keep 12h string
+  time: DEFAULT_GAME_TIME, // keep 12h string
 })
 
 const pickerReady = ref(false)
 
-/* ---------- Utils ---------- */
-function nextFridayISODate() {
-  const now = DateTime.now().setZone(TZ)
-  const days = (5 - now.weekday + 7) % 7 || 7
-  return now.plus({ days }).toISODate()
-}
-
 function setNextFriday() {
-  formData.value.date = nextFridayISODate()
+  formData.value.date = nextFridayISODate(APP_TIMEZONE)
 }
 
 function fridayOnly(dateStr) {
-  const fmt = dateStr?.includes('/') ? 'yyyy/MM/dd' : 'yyyy-MM-dd'
-  const dt = DateTime.fromFormat(dateStr, fmt, { zone: TZ })
-  return dt.isValid && dt.weekday === 5
-}
-
-function combineDateTimeToUTC(dateStr, timeStr12h) {
-  const dt = DateTime.fromFormat(`${dateStr} ${timeStr12h}`, 'yyyy-MM-dd hh:mm a', { zone: TZ })
-  if (!dt.isValid) throw new Error('Invalid time value')
-  return dt.toUTC().toISO()
+  return isFridayDate(dateStr, APP_TIMEZONE)
 }
 
 /* ---------- Seed ---------- */
@@ -144,9 +133,9 @@ watch(
     await nextTick()
 
     if (!props.isEdit) {
-      if (!formData.value.date) formData.value.date = nextFridayISODate()
+      if (!formData.value.date) formData.value.date = nextFridayISODate(APP_TIMEZONE)
       if (!/(am|pm)/i.test(formData.value.time || '')) {
-        formData.value.time = '05:30 PM'
+        formData.value.time = DEFAULT_GAME_TIME
       }
     }
 
@@ -162,7 +151,7 @@ const submitForm = async () => {
     return
   }
   try {
-    const utcISO = combineDateTimeToUTC(date, time)
+    const utcISO = combineDateTimeToUTC(date, time, APP_TIMEZONE)
     const payload = {
       ...formData.value,
       date: utcISO,

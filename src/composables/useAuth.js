@@ -1,8 +1,7 @@
 // src/composables/useAuth.js
-import PocketBase from 'pocketbase'
 import { ref } from 'vue'
+import pb from 'src/services/pocketbase'
 
-const pb = new PocketBase('http://127.0.0.1:8090')
 const currentUser = ref(pb.authStore.model)
 
 pb.authStore.onChange(() => {
