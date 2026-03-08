@@ -1,5 +1,6 @@
 services:
   traefik:
+    image: traefik:v2.11
     command:
       - --entrypoints.websecure.address=:443
       - --certificatesresolvers.myresolver.acme.tlschallenge=true

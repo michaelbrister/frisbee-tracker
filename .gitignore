@@ -3,53 +3,71 @@
 # ======================
 *.log
 *.tmp
+*.swp
 .DS_Store
 Thumbs.db
 
-
 # ======================
-# Node (Quasar frontend)
+# Node / Quasar
 # ======================
 node_modules/
-dist
+dist/
 .quasar/
-.vscode/
-
-# Quasar core related directories
-.quasar
-/dist
 /quasar.config.*.temporary.compiled*
-
-# Cordova related directories and files
-/src-cordova/node_modules
-/src-cordova/platforms
-/src-cordova/plugins
-/src-cordova/www
-
-# Capacitor related directories and files
-/src-capacitor/www
-/src-capacitor/node_modules
-
-# Log files
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Editor directories and files
-.idea
+# ======================
+# Editor / IDE
+# ======================
+.vscode/
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 
-# local .env files
-.env.local*
+# ======================
+# Mobile Build Outputs
+# ======================
+/src-cordova/node_modules
+/src-cordova/platforms
+/src-cordova/plugins
+/src-cordova/www
+/src-capacitor/node_modules
+/src-capacitor/www
 
-# PocketBase database files
+# ======================
+# Environment / Secrets
+# ======================
+.env
+.env.*
+!.env.example
+!.env.production
+
+# ======================
+# PocketBase Local Data / Binaries
+# ======================
+pocketbase/pb_data/storage/
 pocketbase/pb_data/data.db
 pocketbase/pb_data/data.db*
 pocketbase/pb_data/*.auxiliary.db
 pocketbase/pb_data/auxiliary.db*
+pocketbase/pb_data/backups/
+pocketbase/pb_data/types.d.ts
+pocketbase/pocketbase
+pocketbase/pocketbase_*
+pocketbase/_pb_data_old/
+pocketbase/_pb_migrations_old/
 
-pocketbase/pb_data/backups/*.zip
-pocketbase/pb_data/backups/*.zip*
+# ======================
+# Local Infra Data
+# ======================
+letsencrypt/
+
+# ======================
+# Test / Coverage
+# ======================
+coverage/
+.nyc_output/

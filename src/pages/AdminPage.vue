@@ -4,24 +4,203 @@
       <div class="row items-center q-pa-sm">
         <q-btn icon="logout" label="Logout" color="negative" unelevated glossy @click="logout" />
         <q-space />
+        <ThemeToggle class="q-mr-sm" />
+        <q-btn label="People" icon="groups" color="secondary" class="q-mr-sm" @click="goToPeople" />
         <q-btn label="League Page" icon="sports_esports" color="primary" @click="goToLeague" />
       </div>
     </q-header>
 
     <q-page-container>
-      <q-page padding>
-        <h1 class="text-h5">Admin Panel - Manage Games</h1>
+      <q-page class="q-px-md q-pt-md q-pb-xl">
+        <div class="row items-center justify-between q-mb-sm">
+          <h1 class="text-h6 q-mb-none">Admin Panel — Manage Games</h1>
+          <q-toggle
+            v-model="frisbeeCronEnabled"
+            label="Game Cron"
+            color="primary"
+            :disable="isLoading || togglingCron || rsvpPaused"
+            @update:model-value="toggleCronFlag"
+          >
+            <template #thumb>
+              <q-spinner v-if="togglingCron" size="14px" />
+            </template>
+          </q-toggle>
+          <q-toggle
+            v-model="rsvpPaused"
+            class="q-ml-md"
+            label="Pause RSVPs"
+            color="warning"
+            :disable="isLoading || togglingRsvpPaused"
+            @update:model-value="toggleRsvpPaused"
+          >
+            <template #thumb>
+              <q-spinner v-if="togglingRsvpPaused" size="14px" />
+            </template>
+          </q-toggle>
+        </div>
 
-        <q-toggle
-          v-model="frisbeeCronEnabled"
-          label="Enable Frisbee Game Cron"
-          color="primary"
-          @update:model-value="toggleCronFlag"
-          class="q-mb-md"
-        />
+        <q-card flat bordered class="q-mb-md">
+          <q-card-section class="row items-center justify-between q-col-gutter-sm">
+            <div class="col-12 col-md">
+              <div class="text-subtitle1">Friday Reset Status</div>
+              <div class="text-caption text-grey-7">Next scheduled run: {{ nextScheduledRunLabel }}</div>
+              <div class="text-caption text-grey-7">Last run: {{ lastRunLabel }}</div>
+              <div v-if="latestCronRun?.details" class="text-caption text-grey-7">
+                {{ latestCronRun.details }}
+              </div>
+            </div>
+            <div class="col-12 col-md-auto row q-gutter-sm">
+              <q-btn
+                color="secondary"
+                outline
+                icon="refresh"
+                label="Refresh Status"
+                :loading="cronStatusLoading"
+                @click="loadCronStatus"
+              />
+              <q-btn
+                color="primary"
+                icon="play_arrow"
+                label="Run Reset Now"
+                :loading="manualRunLoading"
+                :disable="manualRunLoading"
+                @click="runResetNow"
+              />
+            </div>
+          </q-card-section>
+        </q-card>
 
-        <!-- Existing Games Table -->
+        <q-card flat bordered class="q-mb-md">
+          <q-card-section>
+            <div class="text-subtitle1">Pause Message</div>
+            <div class="text-caption text-grey-7 q-mb-sm">
+              Shown on the league page when "Pause RSVPs" is enabled.
+            </div>
+            <q-input
+              v-model="pauseMessageDraft"
+              type="textarea"
+              autogrow
+              outlined
+              dense
+              maxlength="280"
+              hint="Example: Game is canceled tonight due to weather. We'll update soon."
+              :disable="isLoading || savingPauseMessage"
+            />
+            <div class="row justify-end q-mt-sm">
+              <q-btn
+                color="primary"
+                icon="save"
+                label="Save Message"
+                :loading="savingPauseMessage"
+                :disable="isLoading || !pauseMessageDraft.trim()"
+                @click="onSavePauseMessage"
+              />
+            </div>
+          </q-card-section>
+        </q-card>
+
+        <div v-if="$q.screen.lt.md">
+          <q-pull-to-refresh @refresh="onPullToRefresh" :disable="isLoading">
+            <div class="column q-gutter-sm q-mt-sm">
+              <q-card v-for="g in rows" :key="g.id" flat bordered>
+                <q-card-section class="q-pb-sm">
+                  <div class="row items-center justify-between">
+                    <div class="text-subtitle1 ellipsis">{{ g.title }}</div>
+                    <q-chip
+                      :color="g.cancelled ? 'negative' : 'positive'"
+                      text-color="white"
+                      dense
+                      square
+                      :icon="g.cancelled ? 'event_busy' : 'event_available'"
+                    >
+                      {{ g.cancelled ? 'Cancelled' : 'Scheduled' }}
+                    </q-chip>
+                  </div>
+
+                  <div class="row items-center text-caption text-grey-7 q-mt-xs">
+                    <q-icon name="event" size="16px" class="q-mr-xs" /> {{ g._dateLabel }}
+                    <q-icon name="place" size="16px" class="q-ml-md q-mr-xs" /> {{ g.location }}
+                  </div>
+
+                  <div v-if="g.cancelled && g.cancel_reason" class="text-body2 q-mt-xs">
+                    Reason: {{ g.cancel_reason }}
+                  </div>
+                </q-card-section>
+
+                <q-separator />
+
+                <q-card-actions align="right" class="q-gutter-xs">
+                  <q-btn
+                    dense
+                    outline
+                    color="secondary"
+                    icon="check_circle"
+                    label="Set Active"
+                    v-if="!g.active"
+                    @click="setActiveGame(g)"
+                    aria-label="Set Active"
+                  />
+                  <q-btn
+                    dense
+                    flat
+                    color="primary"
+                    icon="edit"
+                    label="Edit"
+                    @click="editGame(g)"
+                    aria-label="Edit"
+                  />
+                  <q-btn
+                    dense
+                    flat
+                    color="negative"
+                    icon="delete"
+                    label="Delete"
+                    @click="confirmDelete(g)"
+                    aria-label="Delete"
+                  />
+                  <q-btn
+                    v-if="!g.cancelled"
+                    dense
+                    flat
+                    color="orange"
+                    icon="event_busy"
+                    label="Cancel"
+                    @click="promptCancel(g)"
+                    aria-label="Cancel"
+                  />
+                  <q-btn
+                    v-else
+                    dense
+                    flat
+                    color="teal"
+                    icon="refresh"
+                    label="Un-cancel"
+                    @click="uncancel(g)"
+                    aria-label="Un-cancel"
+                  />
+                  <q-btn
+                    dense
+                    flat
+                    icon="more_vert"
+                    @click="moreActions(g)"
+                    aria-label="More actions"
+                  />
+                </q-card-actions>
+              </q-card>
+            </div>
+
+            <q-banner
+              v-if="!isLoading && rows.length === 0"
+              class="bg-grey-3 q-pa-md q-mt-md"
+              rounded
+            >
+              No games found. Tap "New Game" to create one.
+            </q-banner>
+          </q-pull-to-refresh>
+        </div>
+
         <q-table
+          v-else
           :rows="rows"
           :columns="columns"
           row-key="id"
@@ -29,15 +208,21 @@
           bordered
           dense
           :loading="isLoading"
+          :rows-per-page-options="[10, 25, 50, 0]"
+          :sort-method="sortByDate"
           class="q-mt-md"
         >
-          <template v-slot:loading>
+          <template #loading>
             <q-inner-loading showing color="primary" />
           </template>
 
-          <template v-slot:body="props">
+          <template #no-data>
+            <div class="q-pa-md text-grey-7">No games yet. Click "New Game".</div>
+          </template>
+
+          <template #body="props">
             <q-tr :props="props">
-              <q-td key="active">
+              <q-td key="active" :props="props">
                 <q-icon
                   v-if="props.row.active"
                   name="check_circle"
@@ -54,22 +239,16 @@
                   @click="setActiveGame(props.row)"
                 />
               </q-td>
-              <q-td key="title">{{ props.row.title }}</q-td>
-              <q-td key="date">
-                {{ formatToEastern(props.row.date, props.row.date_only) }}
+
+              <q-td key="title" :props="props">{{ props.row.title }}</q-td>
+
+              <q-td key="date" :props="props">
+                {{ props.row._dateLabel }}
               </q-td>
-              <q-td key="location">{{ props.row.location }}</q-td>
-              <q-td key="actions">
-                <q-btn dense flat icon="edit" color="primary" @click="editGame(props.row)" />
-                <q-btn
-                  dense
-                  flat
-                  icon="delete"
-                  color="negative"
-                  @click="confirmDelete(props.row)"
-                />
-              </q-td>
-              <q-td key="status">
+
+              <q-td key="location" :props="props">{{ props.row.location }}</q-td>
+
+              <q-td key="status" :props="props">
                 <q-chip
                   v-if="props.row.cancelled"
                   color="negative"
@@ -90,17 +269,24 @@
                 </div>
               </q-td>
 
-              <q-td key="actions">
-                <q-btn dense flat icon="edit" color="primary" @click="editGame(props.row)" />
+              <q-td key="actions" :props="props" class="q-gutter-xs">
+                <q-btn
+                  dense
+                  flat
+                  icon="edit"
+                  color="primary"
+                  @click="editGame(props.row)"
+                  aria-label="Edit"
+                />
                 <q-btn
                   dense
                   flat
                   icon="delete"
                   color="negative"
                   @click="confirmDelete(props.row)"
+                  aria-label="Delete"
                 />
-
-                <!-- NEW: cancel / uncancel -->
+                <q-separator vertical spaced />
                 <q-btn
                   v-if="!props.row.cancelled"
                   dense
@@ -109,6 +295,7 @@
                   color="orange"
                   label="Cancel"
                   @click="promptCancel(props.row)"
+                  aria-label="Cancel"
                 />
                 <q-btn
                   v-else
@@ -118,24 +305,24 @@
                   color="teal"
                   label="Un-cancel"
                   @click="uncancel(props.row)"
+                  aria-label="Un-cancel"
                 />
               </q-td>
             </q-tr>
           </template>
         </q-table>
 
-        <!-- Create Game FAB -->
         <q-fab
           color="primary"
           icon="add"
           label="New Game"
           label-position="left"
           direction="up"
-          class="fixed-bottom-right q-mr-md q-mb-md"
+          class="fixed-bottom-right q-mr-md"
+          :style="{ marginBottom: `calc(env(safe-area-inset-bottom) + 12px)` }"
           @click="showCreateDialog()"
         />
 
-        <!-- Create/Edit Game Dialog -->
         <GameDialog
           v-model="showGameDialog"
           :is-edit="isEditMode"
@@ -149,30 +336,62 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, defineAsyncComponent, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Notify, useQuasar } from 'quasar'
 import { DateTime } from 'luxon'
+import { Notify, useQuasar } from 'quasar'
 import pb from 'src/services/pocketbase'
+import ThemeToggle from 'src/components/ThemeToggle.vue'
 import { useGameStore } from 'src/stores/gameStore'
-import { getFrisbeeCronEnabled, setFrisbeeCronEnabled } from 'src/services/settingsService'
-import GameDialog from 'src/components/GameDialog.vue'
 import { storeToRefs } from 'pinia'
+import { APP_TIMEZONE } from 'src/constants/app'
+import {
+  combineDateTimeToUTC,
+  formatDateTimeInTimezone,
+  formatGameDateLabel,
+  nextFridayISODate,
+  toGameSortTimestamp,
+} from 'src/utils/dates'
+import { useQuasarDialogs } from 'src/composables/useQuasarDialogs'
+import { useAdminGameDialogState } from 'src/composables/useAdminGameDialogState'
+import { useAdminGameActions } from 'src/composables/useAdminGameActions'
+import { useAdminCronSettings } from 'src/composables/useAdminCronSettings'
 
 const router = useRouter()
 const $q = useQuasar()
 
-/* ---------------- Pinia ---------------- */
 const gameStore = useGameStore()
 const { games, isLoading } = storeToRefs(gameStore)
+const latestCronRun = ref(null)
+const cronStatusLoading = ref(false)
+const manualRunLoading = ref(false)
 
-/* ---------------- Local state ---------------- */
-const frisbeeCronEnabled = ref(false)
-const showGameDialog = ref(false)
-const isEditMode = ref(false)
-const dialogGameData = ref({})
+const { confirmDialog, promptStringDialog, pickAction } = useQuasarDialogs($q)
+const { showGameDialog, isEditMode, dialogGameData, showCreateDialog, editGame, resetDialog } =
+  useAdminGameDialogState()
+const {
+  frisbeeCronEnabled,
+  togglingCron,
+  rsvpPaused,
+  togglingRsvpPaused,
+  pauseMessage,
+  savingPauseMessage,
+  loadCronFlag,
+  toggleCronFlag,
+  toggleRsvpPaused,
+  savePauseMessage,
+} = useAdminCronSettings()
+const pauseMessageDraft = ref('')
 
-/* ---------------- Table columns ---------------- */
+const GameDialog = defineAsyncComponent(() => import('src/components/GameDialog.vue'))
+
+const rows = computed(() =>
+  (games.value ?? []).map((g) => ({
+    ...g,
+    _dateLabel: formatGameDateLabel(g.date, g.date_only, APP_TIMEZONE),
+  })),
+)
+
 const columns = [
   { name: 'active', label: 'Active', field: 'active', sortable: false, align: 'center' },
   { name: 'title', label: 'Title', field: 'title', sortable: true, align: 'left' },
@@ -182,209 +401,220 @@ const columns = [
   { name: 'actions', label: 'Actions', field: 'actions', sortable: false, align: 'center' },
 ]
 
-/* ---------------- Rows (array, not ref) ---------------- */
-const rows = computed(() => games.value ?? [])
+function sortByDate(a, b) {
+  return toGameSortTimestamp(a, APP_TIMEZONE) - toGameSortTimestamp(b, APP_TIMEZONE)
+}
 
-/* ---------------- Lifecycle ---------------- */
 onMounted(async () => {
-  try {
-    await gameStore.fetchGames()
-    await loadCronFlag()
-  } catch (e) {
-    console.error(e)
+  const [gamesResult, settingsResult, statusResult] = await Promise.allSettled([
+    gameStore.fetchGames(),
+    loadCronFlag(),
+    loadCronStatus(),
+  ])
+
+  if (gamesResult.status === 'rejected') {
+    console.error('Failed to load games on admin page mount', gamesResult.reason)
+  }
+  if (settingsResult.status === 'rejected') {
+    console.error('Failed to load settings on admin page mount', settingsResult.reason)
+  } else {
+    pauseMessageDraft.value = pauseMessage.value
+  }
+  if (statusResult.status === 'rejected') {
+    console.error('Failed to load cron status on admin page mount', statusResult.reason)
   }
 })
 
-/* ---------------- Nav ---------------- */
+async function onSavePauseMessage() {
+  const message = pauseMessageDraft.value.trim()
+  if (!message) return
+  const saved = await savePauseMessage(message)
+  pauseMessageDraft.value = saved
+}
+
 function logout() {
   pb.authStore.clear()
   router.push({ name: 'login' })
 }
+
 function goToLeague() {
   router.push({ name: 'league' })
 }
 
-/* ---------------- Dialogs: cancel/uncancel ---------------- */
-function promptCancel(row) {
-  $q.dialog({
-    title: 'Cancel Game',
-    message: `Provide a reason for cancelling ${formatToEastern(row.date)}:`,
-    prompt: {
-      model: '',
-      type: 'text',
-      isValid: (val) => (val || '').trim().length > 0,
-      label: 'Reason',
-      outlined: true,
-    },
-    cancel: true,
-    persistent: true,
-  }).onOk(async (reason) => {
-    try {
-      await gameStore.cancelGame(row.id, reason.trim())
-      Notify.create({ type: 'warning', message: 'Game cancelled.' })
-    } catch (e) {
-      console.error(e)
-      Notify.create({ type: 'negative', message: 'Failed to cancel game.' })
-    }
+function goToPeople() {
+  router.push({ name: 'admin-people' })
+}
+
+const nextScheduledRunLabel = computed(() => {
+  const now = DateTime.now().setZone(APP_TIMEZONE)
+  let next = now.set({ minute: 5, second: 0, millisecond: 0 })
+  if (next <= now) next = next.plus({ hours: 1 })
+  return next.toLocaleString(DateTime.DATETIME_MED)
+})
+
+const lastRunLabel = computed(() => {
+  if (!latestCronRun.value?.created) return 'No run recorded yet'
+  return formatDateTimeInTimezone(latestCronRun.value.created, APP_TIMEZONE)
+})
+
+const { moreActions, promptCancel, uncancel, confirmDelete, setActiveGame, handleSave } =
+  useAdminGameActions({
+    $q,
+    rows,
+    gameStore,
+    isEditMode,
+    editGame,
+    resetDialog,
+    requestRefresh,
+    confirmDialog,
+    promptStringDialog,
+    pickAction,
   })
+
+let refTimer
+function requestRefresh(ms = 120) {
+  clearTimeout(refTimer)
+  refTimer = setTimeout(() => gameStore.fetchGames(), ms)
 }
 
-function uncancel(row) {
-  $q.dialog({
-    title: 'Un-cancel Game',
-    message: `Mark ${formatToEastern(row.date)} as scheduled again?`,
-    cancel: true,
-    persistent: true,
-  }).onOk(async () => {
-    try {
-      await gameStore.uncancelGame(row.id)
-      Notify.create({ type: 'positive', message: 'Game restored.' })
-    } catch (e) {
-      console.error(e)
-      Notify.create({ type: 'negative', message: 'Failed to restore game.' })
-    }
-  })
+function onPullToRefresh(done) {
+  gameStore.fetchGames().finally(done)
 }
 
-/* ---------------- Date helpers ---------------- */
-function formatToEastern(datetimeStr, dateOnlyStr) {
-  if (datetimeStr) {
-    let dt = DateTime.fromISO(datetimeStr, { zone: 'utc' })
-    if (!dt.isValid) dt = DateTime.fromSQL(datetimeStr, { zone: 'utc' })
-    if (dt.isValid) return dt.setZone('America/New_York').toLocaleString(DateTime.DATETIME_MED)
-  }
-  if (dateOnlyStr) {
-    const dt = DateTime.fromFormat(dateOnlyStr, 'yyyy-MM-dd', { zone: 'America/New_York' })
-    if (dt.isValid) return dt.toLocaleString(DateTime.DATE_MED)
-  }
-  return '—'
-}
-
-/* ---------------- Create/Edit ---------------- */
-function showCreateDialog() {
-  isEditMode.value = false
-  dialogGameData.value = {
-    title: 'Frisbee',
-    location: 'Bird Street Park',
-    date: getNextFriday(), // yyyy-MM-dd
-    time: '05:30 PM',
-  }
-  showGameDialog.value = true
-}
-
-function editGame(game) {
-  isEditMode.value = true
-  // PB stores ISO; parse ISO first, then fallback to SQL
-  let dt = DateTime.fromISO(game.date, { zone: 'utc' })
-  if (!dt.isValid) dt = DateTime.fromSQL(game.date, { zone: 'utc' })
-  const est = dt.isValid ? dt.setZone('America/New_York') : null
-
-  dialogGameData.value = {
-    ...game,
-    date: est ? est.toISODate() : game.date_only || '',
-    time: est ? est.toFormat('hh:mm a') : game.time || '05:30 PM',
-  }
-  showGameDialog.value = true
-}
-
-async function handleSave(gameData) {
+async function loadCronStatus() {
+  cronStatusLoading.value = true
   try {
-    if (isEditMode.value) {
-      await gameStore.updateGame(gameData)
+    latestCronRun.value = await pb.collection('cron_runs').getFirstListItem('', { sort: '-created' })
+  } catch (err) {
+    if (err?.status !== 404) {
+      console.error('Failed to load cron status', err)
+    }
+    latestCronRun.value = null
+  } finally {
+    cronStatusLoading.value = false
+  }
+}
+
+async function runResetNow() {
+  const ok = await confirmDialog({
+    title: 'Run Reset Now',
+    message: 'This will clear RSVPs for next Friday and re-open responses. Continue?',
+    cancel: true,
+    persistent: true,
+    position: $q.screen.lt.md ? 'bottom' : 'standard',
+  })
+  if (!ok) return
+
+  manualRunLoading.value = true
+  try {
+    const dateOnly = nextFridayISODate(APP_TIMEZONE)
+    const gameTime = import.meta.env.VITE_GAME_TIME || '05:30 PM'
+    const gameTitle = import.meta.env.VITE_GAME_TITLE || 'Frisbee'
+    const gameLocation = import.meta.env.VITE_GAME_LOCATION || 'Bird Street Park'
+    const dateISO = combineDateTimeToUTC(dateOnly, gameTime, APP_TIMEZONE)
+
+    let game = null
+    try {
+      game = await pb.collection('games').getFirstListItem(`date_only="${dateOnly}"`, {
+        $autoCancel: false,
+      })
+    } catch (err) {
+      if (err?.status !== 404) throw err
+    }
+
+    if (game) {
+      game = await pb.collection('games').update(
+        game.id,
+        {
+          title: gameTitle,
+          location: gameLocation,
+          date: dateISO,
+          date_only: dateOnly,
+          active: true,
+          cancelled: false,
+          cancel_reason: null,
+        },
+        { $autoCancel: false },
+      )
     } else {
-      await gameStore.createGame(gameData)
+      game = await pb.collection('games').create(
+        {
+          title: gameTitle,
+          location: gameLocation,
+          date: dateISO,
+          date_only: dateOnly,
+          active: true,
+          cancelled: false,
+          cancel_reason: null,
+        },
+        { $autoCancel: false },
+      )
     }
-    resetDialog()
-  } catch (err) {
-    console.error(err)
-    const isDuplicate = err?.response?.data?.data?.date_only?.message?.includes('must be unique')
-    Notify.create({
-      type: 'negative',
-      message: isDuplicate
-        ? 'A game already exists on that day. Please edit the existing game instead.'
-        : `Failed to ${isEditMode.value ? 'update' : 'create'} game.`,
+
+    const activeOthers = await pb.collection('games').getFullList({
+      filter: `active=true && id!="${game.id}"`,
+      $autoCancel: false,
     })
-    if (isDuplicate) {
-      highlightGameByDate(gameData.date)
+    for (const other of activeOthers) {
+      await pb.collection('games').update(other.id, { active: false }, { $autoCancel: false })
     }
-  }
-}
 
-async function highlightGameByDate(dateStr) {
-  try {
-    const existing = await gameStore.findGameByDate(dateStr)
-    if (existing) editGame(existing)
-  } catch (err) {
-    console.error('Could not find existing game for navigation:', err)
-  }
-}
+    const rsvps = await pb.collection('attendance').getFullList({
+      filter: `game="${game.id}"`,
+      $autoCancel: false,
+    })
+    for (const rsvp of rsvps) {
+      await pb.collection('attendance').delete(rsvp.id, { $autoCancel: false })
+    }
 
-function confirmDelete(game) {
-  $q.dialog({
-    title: 'Confirm',
-    message: `Are you sure you want to delete the game on ${formatToEastern(game.date)}?`,
-    cancel: true,
-    persistent: true,
-  }).onOk(async () => {
     try {
-      await gameStore.deleteGame(game.id)
-      Notify.create({ type: 'info', message: 'Game deleted.' })
-    } catch (e) {
-      console.error(e)
-      Notify.create({ type: 'negative', message: 'Failed to delete game.' })
+      await pb.collection('cron_runs').create(
+        {
+          source: 'manual',
+          status: true,
+          reset_triggered: true,
+          rsvps_reset: String(rsvps.length),
+          run_for_date: dateOnly,
+          details: 'Manual reset run from Admin page',
+          triggered_by: pb.authStore.model?.id || '',
+        },
+        { $autoCancel: false },
+      )
+    } catch (err) {
+      console.error('Failed to write manual run status', err)
     }
-  })
-}
 
-function setActiveGame(selectedGame) {
-  gameStore.setActiveGame(selectedGame)
-}
-
-function resetDialog() {
-  showGameDialog.value = false
-  isEditMode.value = false
-  dialogGameData.value = {}
-}
-
-/* ---------------- Utilities ---------------- */
-function getNextFriday() {
-  const now = new Date()
-  const day = now.getDay()
-  const daysUntilFriday = (5 - day + 7) % 7 || 7
-  const nextFriday = new Date(now)
-  nextFriday.setDate(now.getDate() + daysUntilFriday)
-  return nextFriday.toISOString().split('T')[0] // yyyy-MM-dd
-}
-
-/* ---------------- Cron flag (no auto-cancel, upsert) ---------------- */
-async function loadCronFlag() {
-  try {
-    frisbeeCronEnabled.value = await getFrisbeeCronEnabled()
+    Notify.create({ type: 'positive', message: `Reset complete. Cleared ${rsvps.length} RSVP(s).` })
+    await Promise.all([gameStore.fetchGames(), loadCronStatus()])
   } catch (err) {
-    // 404 here would mean your seed record doesn't exist yet
-    console.error('Failed to load cron flag:', err)
-    frisbeeCronEnabled.value = false
-  }
-}
-
-async function toggleCronFlag() {
-  try {
-    const next = !frisbeeCronEnabled.value
-    // optimistic UI
-    frisbeeCronEnabled.value = next
-
-    const saved = await setFrisbeeCronEnabled(next)
-    frisbeeCronEnabled.value = saved
-
-    Notify.create({
-      type: saved ? 'positive' : 'warning',
-      message: `Frisbee cron ${saved ? 'enabled' : 'disabled'}`,
-    })
-  } catch (err) {
-    console.error('Failed to update cron flag:', err)
-    // revert optimistic UI on failure
-    frisbeeCronEnabled.value = !frisbeeCronEnabled.value
-    Notify.create({ type: 'negative', message: 'Failed to update cron flag' })
+    console.error('Manual reset failed', err)
+    Notify.create({ type: 'negative', message: 'Manual reset failed.' })
+    try {
+      await pb.collection('cron_runs').create(
+        {
+          source: 'manual',
+          status: false,
+          reset_triggered: false,
+          rsvps_reset: '0',
+          run_for_date: '',
+          details: `Manual reset failed: ${err?.message || 'unknown error'}`,
+          triggered_by: pb.authStore.model?.id || '',
+        },
+        { $autoCancel: false },
+      )
+    } catch (writeErr) {
+      console.error('Failed to write failure run status', writeErr)
+    }
+  } finally {
+    manualRunLoading.value = false
   }
 }
 </script>
+
+<style scoped>
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+</style>

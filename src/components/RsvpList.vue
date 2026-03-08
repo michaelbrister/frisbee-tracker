@@ -23,7 +23,31 @@
         <q-list class="q-mt-sm" v-if="users[status]?.length">
           <q-item v-for="user in users[status]" :key="user.id" class="q-pa-none">
             <q-item-section>
-              <div class="ellipsis">{{ user.name }}</div>
+              <div class="ellipsis">{{ userDisplayName(user) }}</div>
+            </q-item-section>
+            <q-item-section side v-if="showActions && canShowActionsFor(user)">
+              <div class="row items-center q-gutter-xs">
+                <q-btn
+                  flat
+                  dense
+                  round
+                  size="sm"
+                  icon="mail"
+                  color="secondary"
+                  aria-label="Send sign-in link"
+                  @click="emitSendSignInLink(user)"
+                />
+                <q-btn
+                  flat
+                  dense
+                  round
+                  size="sm"
+                  icon="lock_reset"
+                  color="secondary"
+                  aria-label="Send password reset email"
+                  @click="emitSendResetEmail(user)"
+                />
+              </div>
             </q-item-section>
           </q-item>
         </q-list>
@@ -33,7 +57,7 @@
 </template>
 
 <script setup>
-defineProps({
+const props = defineProps({
   title: {
     type: String,
     required: true,
@@ -45,6 +69,22 @@ defineProps({
   users: {
     type: Object,
     required: true,
+  },
+  showActions: {
+    type: Boolean,
+    default: false,
+  },
+  actionableUserIds: {
+    type: Array,
+    default: () => [],
+  },
+  onSendSignInLink: {
+    type: Function,
+    default: null,
+  },
+  onSendResetEmail: {
+    type: Function,
+    default: null,
   },
 })
 
@@ -61,5 +101,29 @@ const statusColor = (status) => {
     default:
       return 'grey'
   }
+}
+
+const canShowActionsFor = (user) => {
+  if (!user?.id) return false
+  if (!props.actionableUserIds?.length) return true
+  return props.actionableUserIds.includes(user.id)
+}
+
+const emitSendSignInLink = (user) => {
+  if (typeof props.onSendSignInLink === 'function') props.onSendSignInLink(user)
+}
+
+const emitSendResetEmail = (user) => {
+  if (typeof props.onSendResetEmail === 'function') props.onSendResetEmail(user)
+}
+
+const userDisplayName = (user) => {
+  if (!user) return ''
+  if (user.display_name) return user.display_name
+  const first = (user.first_name || '').trim()
+  const last = (user.last_name || '').trim()
+  const full = `${first} ${last}`.trim()
+  if (full) return full
+  return user.name || user.email || user.id || ''
 }
 </script>
