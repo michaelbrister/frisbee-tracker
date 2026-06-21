@@ -24,7 +24,7 @@
     "pocketbase": "^0.26.2",
     "quasar": "^2.20.0",
     "vue": "^3.5.38",
-    "vue-router": "^4.0.0"
+    "vue-router": "^5.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
