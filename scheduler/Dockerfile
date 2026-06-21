@@ -1,5 +1,5 @@
 # scheduler/Dockerfile
-FROM node:20-alpine
+FROM node:24-alpine
 
 RUN apk add --no-cache tzdata bash
 ENV TZ=America/New_York

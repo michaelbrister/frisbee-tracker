@@ -1,19 +1,19 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
-# Copy package.json and yarn.lock first for better cache usage
-COPY package*.json yarn.lock* ./
+# Copy package files first for better cache usage
+COPY package*.json ./
 
 # Now copy the rest of the source code
 COPY . .
 
 # Install dependencies (must be done before build)
-RUN yarn install
+RUN npm ci
 
-# Build the Quasar SPA using local CLI via yarn run
-RUN yarn run quasar build -m spa
+# Build the Quasar SPA
+RUN npm run build
 
 # Production stage
 FROM nginx:alpine
