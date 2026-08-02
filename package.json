@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@quasar/extras": "^2.0.2",
-    "axios": "^1.18.1",
+    "axios": "^1.19.0",
     "luxon": "^3.7.2",
     "pinia": "^4.0.2",
     "pocketbase": "^0.27.0",
