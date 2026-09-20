@@ -17,7 +17,7 @@
     "postinstall": "quasar prepare"
   },
   "dependencies": {
-    "@quasar/extras": "^2.0.4",
+    "@quasar/extras": "^2.1.0",
     "axios": "^1.20.0",
     "luxon": "^3.7.2",
     "pinia": "^4.0.3",
