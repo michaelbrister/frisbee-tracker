@@ -31,7 +31,7 @@
     "@quasar/app-vite": "^3.8.4",
     "@vue/eslint-config-prettier": "^10.2.0",
     "autoprefixer": "^10.6.1",
-    "eslint": "^10.10.0",
+    "eslint": "^10.11.0",
     "eslint-plugin-vue": "^10.11.0",
     "globals": "^17.12.0",
     "postcss": "^8.5.28",
